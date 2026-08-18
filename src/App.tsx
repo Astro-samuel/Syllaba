@@ -17,8 +17,9 @@ import { CalendarView } from './components/CalendarView';
 import { GradeCalculator } from './components/GradeCalculator';
 import { CalendarSyncModal } from './components/CalendarSyncModal';
 import { exchangeCodeForTokens } from './utils/googleAuth';
-import { saveGoogleCalendarAuth } from './utils/storage';
+import { saveGoogleCalendarAuth, getGoogleCalendarAuth } from './utils/storage';
 import { fetchGoogleAccountProfile, saveGoogleUser } from './utils/googleCalendarLive';
+import { deleteAssignmentsFromGoogleCalendar } from './utils/googleCalendarApi';
 
 export const App: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -159,11 +160,23 @@ export const App: React.FC = () => {
     updateAssignments(updated);
   };
 
-  const handleDeleteCourse = (courseId: string) => {
+  const handleDeleteCourse = async (courseId: string) => {
+    const removedAssignmentIds = assignments.filter((a) => a.courseId === courseId).map((a) => a.id);
     const updatedCourses = courses.filter((c) => c.id !== courseId);
     const updatedAssignments = assignments.filter((a) => a.courseId !== courseId);
     updateCourses(updatedCourses);
     updateAssignments(updatedAssignments);
+
+    // Best-effort: remove the corresponding events from Google Calendar right away.
+    // If this fails (offline, revoked access, etc.) the deletion above already stuck —
+    // the stale event records self-heal on the next manual "Sync now".
+    if (getGoogleCalendarAuth() !== null && removedAssignmentIds.length > 0) {
+      try {
+        await deleteAssignmentsFromGoogleCalendar(removedAssignmentIds);
+      } catch (err) {
+        console.error('Failed to remove syllabus events from Google Calendar', err);
+      }
+    }
   };
 
   const handleUpdateScore = (assignmentId: string, score: number | null) => {

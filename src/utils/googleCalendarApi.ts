@@ -356,6 +356,60 @@ export async function syncAssignments(
   return { result: { pushed, pulled }, assignments: workingAssignments };
 }
 
+export async function deleteAssignmentsFromGoogleCalendar(
+  assignmentIds: string[]
+): Promise<{ deleted: number; failed: number }> {
+  const auth = getGoogleCalendarAuth();
+  if (!auth || !auth.calendarId) {
+    return { deleted: 0, failed: 0 };
+  }
+
+  const { accessToken, calendarId } = await getValidAccessToken();
+  if (!calendarId) {
+    return { deleted: 0, failed: 0 };
+  }
+
+  const events = { ...auth.events };
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  let deleted = 0;
+  let failed = 0;
+
+  try {
+    for (const assignmentId of assignmentIds) {
+      const record = events[assignmentId];
+      if (!record) continue; // never synced to Google — nothing to delete there
+
+      try {
+        const res = await fetch(`${CALENDAR_BASE}/calendars/${calendarId}/events/${record.googleEventId}`, {
+          method: 'DELETE',
+          headers
+        });
+        if (!res.ok && res.status !== 404) {
+          const data = await res.json();
+          if (res.status === 403) {
+            throw new GoogleAuthExpiredError(data.error?.message || 'Google Calendar access needs to be reconnected');
+          }
+          throw new Error(data.error?.message || 'Delete failed');
+        }
+        delete events[assignmentId];
+        deleted += 1;
+      } catch (err) {
+        if (err instanceof GoogleAuthExpiredError) throw err;
+        failed += 1;
+      }
+    }
+  } catch (err) {
+    if (err instanceof GoogleAuthExpiredError) {
+      clearGoogleCalendarAuth();
+      throw new Error('Google Calendar access needs to be reconnected');
+    }
+    throw err;
+  }
+
+  saveGoogleCalendarAuth({ ...auth, events });
+  return { deleted, failed };
+}
+
 export function disconnectGoogleCalendar(): void {
   clearGoogleCalendarAuth();
 }
