@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.vite/
+.env
+.env.local
+*.log
+
+# Desktop build outputs
+dist-electron/
+build-desktop/
+desktop-build/
+Syllaba-Desktop-Windows/
+tmp/
+
+# Temporary planning files
+.superpowers/
+
+# Local Netlify folder
+.netlify
+deno.lock

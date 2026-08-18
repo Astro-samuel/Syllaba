@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #EEF2F9;
+    color: #1E2336;
+    @apply antialiased font-sans;
+  }
+
+  ::selection {
+    background-color: #151928;
+    color: #FFFFFF;
+  }
+
+  h1, h2, h3, .font-heading {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    color: #151928;
+    @apply tracking-tight font-bold;
+  }
+
+  .number-display {
+    font-family: 'Space Grotesk', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Caplen Clean White Panels & Cards */
+  .caplen-card {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.02);
+    @apply bg-white rounded-3xl border border-slate-200/60 transition-all duration-200;
+  }
+
+  .caplen-card-interactive {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.02);
+    @apply bg-white rounded-3xl border border-slate-200/60 transition-all duration-300;
+  }
+
+  .caplen-card-interactive:hover {
+    box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.03);
+    transform: translateY(-2px);
+  }
+
+  .caplen-navy-card {
+    background: linear-gradient(135deg, #151928 0%, #1E2438 100%);
+    color: #FFFFFF;
+    box-shadow: 0 20px 40px -10px rgba(21, 25, 40, 0.25);
+    @apply rounded-3xl relative overflow-hidden border border-slate-700/40;
+  }
+
+  /* Vibrant Pill Badges */
+  .caplen-pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all;
+  }
+
+  .caplen-pill-navy {
+    background-color: #151928;
+    color: #FFFFFF;
+    @apply shadow-sm;
+  }
+
+  .caplen-pill-vibrant-purple {
+    background-color: #EDE9FE;
+    color: #6D28D9;
+    border: 1px solid #C4B5FD;
+  }
+
+  .caplen-pill-vibrant-peach {
+    background-color: #FEF3C7;
+    color: #B45309;
+    border: 1px solid #FDE68A;
+  }
+
+  .caplen-pill-vibrant-lime {
+    background-color: #F7FEE7;
+    color: #3F6212;
+    border: 1px solid #D9F99D;
+  }
+
+  .caplen-pill-vibrant-cyan {
+    background-color: #CFFAFE;
+    color: #0E7490;
+    border: 1px solid #A5F3FC;
+  }
+}
+
+/* Custom Soft Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EEF2F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
