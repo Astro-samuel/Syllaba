@@ -1,11 +1,12 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
 
 // Set pdfjs worker source
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 /**
- * Extracts raw text from uploaded syllabus files (.pdf, .docx, .txt, .md, .csv)
+ * Extracts raw text from uploaded syllabus & schedule files (.pdf, .docx, .xlsx, .xls, .txt, .md, .csv)
  */
 export async function extractTextFromFile(file: File): Promise<string> {
   const fileName = file.name.toLowerCase();
@@ -15,12 +16,17 @@ export async function extractTextFromFile(file: File): Promise<string> {
     return extractTextFromPdf(file);
   }
 
-  // 2. Word Document (.docx) Extraction
+  // 2. Word Document (.docx, .doc) Extraction
   if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
     return extractTextFromDocx(file);
   }
 
-  // 3. Text / Markdown / CSV / Default
+  // 3. Excel Spreadsheet (.xlsx, .xls) Extraction
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+    return extractTextFromExcel(file);
+  }
+
+  // 4. Text / Markdown / CSV / Default
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => resolve((e.target?.result as string) || '');
@@ -56,4 +62,22 @@ async function extractTextFromDocx(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
   const result = await mammoth.extractRawText({ arrayBuffer });
   return result.value || '';
+}
+
+/**
+ * Extract text from Excel spreadsheet (.xlsx, .xls) using SheetJS (XLSX)
+ */
+async function extractTextFromExcel(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  const sheetTexts: string[] = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    // Convert worksheet rows to plain text table format
+    const csvData = XLSX.utils.sheet_to_csv(worksheet);
+    sheetTexts.push(`Sheet: ${sheetName}\n${csvData}`);
+  }
+
+  return sheetTexts.join('\n\n');
 }

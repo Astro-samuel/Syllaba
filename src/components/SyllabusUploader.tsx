@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ExtractionResult, PresetSyllabus } from '../types';
 import { PRESET_SYLLABI, parseSyllabusText } from '../utils/aiParser';
 import { extractTextFromFile } from '../utils/documentExtractor';
-import { UploadCloud, FileText, Sparkles, Key, CheckCircle2, ArrowRight, FileCheck } from 'lucide-react';
+import { UploadCloud, FileText, Sparkles, Key, CheckCircle2, ArrowRight, FileCheck, Calendar, FileSpreadsheet } from 'lucide-react';
 
 interface SyllabusUploaderProps {
   onExtractionComplete: (result: ExtractionResult, color: string) => void;
@@ -15,6 +15,7 @@ export const SyllabusUploader: React.FC<SyllabusUploaderProps> = ({ onExtraction
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
+  const [uploadMode, setUploadMode] = useState<'syllabus' | 'class_schedule'>('syllabus');
 
   const colors = [
     { name: 'Vibrant Amethyst', value: '#8B5CF6' },
@@ -77,14 +78,40 @@ export const SyllabusUploader: React.FC<SyllabusUploaderProps> = ({ onExtraction
       <div className="text-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-caplen-navy shadow-sm mb-3 border border-slate-200/60">
           <Sparkles className="h-3.5 w-3.5 text-vibrant-purpleAccent" />
-          <span>AI-Powered Syllabus Extraction</span>
+          <span>AI Syllabus & Class Schedule Extraction</span>
         </div>
         <h1 className="font-heading text-3xl sm:text-4xl font-extrabold text-caplen-navy">
-          Import Course Syllabus
+          Import Course Syllabus or Class Schedule
         </h1>
         <p className="mt-2 text-xs font-medium text-caplen-muted max-w-md mx-auto">
-          Upload any PDF, Word, or Text syllabus file below to automatically parse 100% of all exams, homeworks, and dates.
+          Upload any PDF, Word, Excel (.xlsx), or text file below to automatically extract exams, assignments, labs, and class meeting schedules.
         </p>
+
+        {/* Mode Selector */}
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <button
+            onClick={() => setUploadMode('syllabus')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-extrabold transition-all border font-heading ${
+              uploadMode === 'syllabus'
+                ? 'bg-caplen-navy text-white border-caplen-navy shadow-xs'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>Course Syllabus</span>
+          </button>
+          <button
+            onClick={() => setUploadMode('class_schedule')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-extrabold transition-all border font-heading ${
+              uploadMode === 'class_schedule'
+                ? 'bg-caplen-navy text-white border-caplen-navy shadow-xs'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            <Calendar className="h-3.5 w-3.5 text-vibrant-limeAccent" />
+            <span>Class Timetable & Schedule</span>
+          </button>
+        </div>
       </div>
 
       {/* Preset Syllabi Cards */}
@@ -137,7 +164,9 @@ export const SyllabusUploader: React.FC<SyllabusUploaderProps> = ({ onExtraction
             <div className="h-16 w-16 rounded-2xl bg-caplen-navy text-vibrant-limeAccent flex items-center justify-center mb-4 shadow-lg animate-bounce">
               <Sparkles className="h-8 w-8 animate-spin" />
             </div>
-            <h3 className="font-heading text-lg font-extrabold text-caplen-navy mb-2">Analyzing Syllabus...</h3>
+            <h3 className="font-heading text-lg font-extrabold text-caplen-navy mb-2">
+              Analyzing {uploadMode === 'class_schedule' ? 'Class Schedule' : 'Syllabus'}...
+            </h3>
             <div className="w-full max-w-xs bg-slate-100 rounded-full h-2 overflow-hidden mb-4 border border-slate-200">
               <div
                 className="bg-caplen-navy h-full transition-all duration-300"
@@ -147,11 +176,11 @@ export const SyllabusUploader: React.FC<SyllabusUploaderProps> = ({ onExtraction
             <div className="flex flex-col gap-1.5 text-xs font-semibold text-caplen-muted">
               <div className={`flex items-center gap-2 ${processingStep >= 1 ? 'text-emerald-600 font-bold' : ''}`}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Reading document text stream</span>
+                <span>Reading document text & tables</span>
               </div>
               <div className={`flex items-center gap-2 ${processingStep >= 2 ? 'text-emerald-600 font-bold' : ''}`}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Extracting 100% of dates, exams & weight percentages</span>
+                <span>Extracting 100% of dates, times, exams & meeting schedule</span>
               </div>
               <div className={`flex items-center gap-2 ${processingStep >= 3 ? 'text-emerald-600 font-bold' : ''}`}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -166,17 +195,23 @@ export const SyllabusUploader: React.FC<SyllabusUploaderProps> = ({ onExtraction
           <div className="flex flex-col justify-center items-center border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center bg-slate-50/50 hover:bg-slate-100/80 hover:border-vibrant-purpleBorder transition-all cursor-pointer relative group">
             <input
               type="file"
-              accept=".txt,.pdf,.doc,.docx,.md,.csv"
+              accept=".txt,.pdf,.doc,.docx,.xlsx,.xls,.md,.csv"
               onChange={handleFileUpload}
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
             />
             <div className="h-12 w-12 rounded-2xl bg-caplen-navy text-white flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-md">
               <UploadCloud className="h-6 w-6 text-vibrant-limeAccent" />
             </div>
-            <h4 className="text-sm font-extrabold text-caplen-navy font-heading">Upload File from Computer</h4>
-            <p className="text-xs text-caplen-muted mt-1">
-              Select or drag & drop PDF, Word (.docx), or Text file
+            <h4 className="text-sm font-extrabold text-caplen-navy font-heading">
+              Upload File (PDF, Word, Excel, CSV)
+            </h4>
+            <p className="text-xs text-caplen-muted mt-1 leading-relaxed">
+              Drag & drop PDF, Word (.docx), Excel spreadsheet (.xlsx, .xls), or text schedule file
             </p>
+            <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-slate-500 bg-white px-2.5 py-1 rounded-full border border-slate-200 shadow-2xs">
+              <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+              <span>Excel & CSV Supported</span>
+            </div>
           </div>
 
           {/* Color Selector */}
@@ -227,11 +262,15 @@ export const SyllabusUploader: React.FC<SyllabusUploaderProps> = ({ onExtraction
         <div className="mt-6">
           <label className="block text-xs font-bold text-caplen-navy mb-2 uppercase tracking-wider flex items-center gap-2 font-heading">
             <FileText className="h-3.5 w-3.5 text-vibrant-purpleText" />
-            <span>Or Paste Syllabus Text Direct</span>
+            <span>Or Paste Syllabus or Class Schedule Text Direct</span>
           </label>
           <textarea
             rows={6}
-            placeholder="Paste syllabus text here..."
+            placeholder={
+              uploadMode === 'class_schedule'
+                ? "Paste class timetable text here (e.g. CS 101 Lecture MWF 10:00 AM - 11:15 AM in Room 204)..."
+                : "Paste syllabus text here..."
+            }
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             className="w-full rounded-2xl bg-slate-50/70 border border-slate-200 p-4 text-xs font-mono text-caplen-navy placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-vibrant-purpleAccent/20 transition-all"
@@ -246,7 +285,7 @@ export const SyllabusUploader: React.FC<SyllabusUploaderProps> = ({ onExtraction
             className="flex items-center gap-2 rounded-full bg-caplen-navy px-8 py-3.5 text-xs font-extrabold text-white shadow-lg hover:bg-caplen-navyHover transition-all disabled:opacity-50 font-heading tracking-wide"
           >
             <Sparkles className="h-4 w-4 text-vibrant-limeAccent" />
-            <span>EXTRACT SCHEDULE WITH AI</span>
+            <span>EXTRACT {uploadMode === 'class_schedule' ? 'CLASS SCHEDULE' : 'SYLLABUS'} WITH AI</span>
           </button>
         </div>
       </div>
