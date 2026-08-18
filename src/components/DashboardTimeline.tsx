@@ -9,7 +9,8 @@ import {
   Plus,
   ArrowUpRight,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 import {
   format,
@@ -44,7 +45,7 @@ interface DashboardTimelineProps {
   onDeleteAssignment: (id: string) => void;
   onNavigateToUpload: () => void;
   onNavigateToCalendar: () => void;
-  onDeleteCourse: (courseId: string) => void;
+  onDeleteCourse?: (courseId: string) => void;
   searchQuery: string;
 }
 
@@ -55,10 +56,12 @@ export const DashboardTimeline: React.FC<DashboardTimelineProps> = ({
   onDeleteAssignment,
   onNavigateToUpload,
   onNavigateToCalendar,
+  onDeleteCourse,
   searchQuery
 }) => {
   const [showAllAssignments, setShowAllAssignments] = useState(false);
   const [miniCalendarMonth, setMiniCalendarMonth] = useState(new Date());
+  const [courseToDelete, setCourseToDelete] = useState<{ id: string; name: string } | null>(null);
 
   const filteredAssignments = assignments.filter((item) => {
     if (searchQuery.trim()) {
@@ -105,6 +108,13 @@ export const DashboardTimeline: React.FC<DashboardTimelineProps> = ({
     { bg: '#CFFAFE', border: '#22D3EE', text: '#164E63', badge: '04' },
   ];
 
+  const confirmDeleteCourse = () => {
+    if (courseToDelete && onDeleteCourse) {
+      onDeleteCourse(courseToDelete.id);
+      setCourseToDelete(null);
+    }
+  };
+
   return (
     <div className="space-y-8 pb-12">
       
@@ -147,9 +157,9 @@ export const DashboardTimeline: React.FC<DashboardTimelineProps> = ({
 
           {/* Right High-Contrast Course Cards */}
           <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-10">
-            {courses.slice(0, 3).map((course, index) => {
+            {courses.map((course, index) => {
               const theme = courseCardThemes[index % courseCardThemes.length];
-              const courseItems = assignments.filter((a) => a.courseId === course.id);
+              const courseItems = assignments.filter((a) => a.courseId === course.id || a.courseName === course.name || a.courseName === course.code);
               const courseDone = courseItems.filter((a) => a.completed).length;
               const pct = courseItems.length > 0 ? Math.round((courseDone / courseItems.length) * 100) : 0;
 
@@ -161,7 +171,14 @@ export const DashboardTimeline: React.FC<DashboardTimelineProps> = ({
                 >
                   <div className="flex items-center justify-between text-xs font-mono font-extrabold">
                     <span className="number-display" style={{ color: theme.text }}>{theme.badge}</span>
-                    <span className="font-extrabold" style={{ color: theme.text }}>•</span>
+                    <button
+                      onClick={() => setCourseToDelete({ id: course.id, name: course.name })}
+                      title={`Remove ${course.name}`}
+                      aria-label={`Remove course ${course.name}`}
+                      className="p-1 rounded-full bg-black/10 hover:bg-rose-600 hover:text-white transition-all text-caplen-navy"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
 
                   <div>
@@ -188,6 +205,45 @@ export const DashboardTimeline: React.FC<DashboardTimelineProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Course Deletion Confirmation Modal */}
+      {courseToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <button
+                onClick={() => setCourseToDelete(null)}
+                className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div>
+              <h3 className="font-heading text-lg font-extrabold text-caplen-navy">Remove Course?</h3>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                Are you sure you want to remove <strong className="text-caplen-navy">{courseToDelete.name}</strong> and all of its associated assignments from your dashboard?
+              </p>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() => setCourseToDelete(null)}
+                className="flex-1 rounded-xl bg-slate-100 py-2.5 text-xs font-extrabold text-slate-700 hover:bg-slate-200 transition-colors font-heading"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteCourse}
+                className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-extrabold text-white hover:bg-rose-700 transition-colors shadow-sm font-heading"
+              >
+                Yes, Remove Course
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. MIDDLE SECTION: "Statistics" */}
       <div>
