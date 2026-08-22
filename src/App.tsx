@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Course, Assignment, TabType, StreakState, ExtractionResult, ExtractedAssignment, CoursePolicies } from './types';
+import { Course, Assignment, TabType, StreakState, ExtractionResult, ExtractedAssignment, CoursePolicies, ClassSchedule } from './types';
 import {
   getStoredCourses,
   saveCourses,
@@ -17,7 +17,6 @@ import { CalendarView } from './components/CalendarView';
 import { GradeCalculator } from './components/GradeCalculator';
 import { CalendarSyncModal } from './components/CalendarSyncModal';
 import { CourseDetailModal } from './components/CourseDetailModal';
-import { parseClassSchedule } from './utils/aiParser';
 import { exchangeCodeForTokens } from './utils/googleAuth';
 import { saveGoogleCalendarAuth, getGoogleCalendarAuth } from './utils/storage';
 import { fetchGoogleAccountProfile, saveGoogleUser } from './utils/googleCalendarLive';
@@ -110,7 +109,8 @@ export const App: React.FC = () => {
     instructor: string,
     semester: string,
     extractedItems: ExtractedAssignment[],
-    policies: CoursePolicies
+    policies: CoursePolicies,
+    classSchedule: ClassSchedule | null
   ) => {
     const courseId = `c_${Date.now()}`;
     const newCourse: Course = {
@@ -122,7 +122,7 @@ export const App: React.FC = () => {
       semester: semester,
       createdAt: new Date().toISOString(),
       policies,
-      classSchedule: parseClassSchedule(policies.classMeetings)
+      classSchedule
     };
 
     const newAssignments: Assignment[] = extractedItems.map((item, idx) => ({
@@ -206,12 +206,12 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateCoursePolicies = (courseId: string, policies: CoursePolicies) => {
-    // Re-derive the recurring meeting pattern whenever classMeetings text is
-    // edited, so a manual correction ("Tuesday and Thursday, 2:00 - 3:30 PM")
-    // is reflected in the calendar's recurring chips, not just the text box.
-    const updated = courses.map((c) =>
-      c.id === courseId ? { ...c, policies, classSchedule: parseClassSchedule(policies.classMeetings) } : c
-    );
+    const updated = courses.map((c) => (c.id === courseId ? { ...c, policies } : c));
+    updateCourses(updated);
+  };
+
+  const handleUpdateClassSchedule = (courseId: string, classSchedule: ClassSchedule | null) => {
+    const updated = courses.map((c) => (c.id === courseId ? { ...c, classSchedule } : c));
     updateCourses(updated);
   };
 
@@ -290,6 +290,7 @@ export const App: React.FC = () => {
           onClose={() => setSelectedCourseId(null)}
           onToggleComplete={handleToggleComplete}
           onSavePolicies={(policies: CoursePolicies) => handleUpdateCoursePolicies(selectedCourseId, policies)}
+          onSaveClassSchedule={(classSchedule: ClassSchedule | null) => handleUpdateClassSchedule(selectedCourseId, classSchedule)}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSyllabusText, parseClassSchedule } from './aiParser';
+import { parseSyllabusText, parseClassSchedule, parseClassScheduleOptions } from './aiParser';
 
 // Regression test for the bug where a real multi-line PDF syllabus (tables,
 // wrapped headings, a schedule with one item per line) produced garbage or
@@ -185,6 +185,10 @@ School of Engineering, UBC Okanagan
 Quick facts
 Instructor Dr. Priya Fenwick, Ph.D., P.Eng.
 Email priya.fenwick@ubc.ca
+Drop-in hours Wednesdays, 2:00 – 4:00 PM, in EME 3311 or on Zoom.
+Textbook Priya Fenwick & Daniel Osei, Foundations of Widget Design, 4th edition,
+Pearson, 2023
+Calculator Only the TI-36X Pro or the CASIO fx-991ES PLUS C may be used in exams.
 
 Class meetings
 Section   Days and time   Room
@@ -221,38 +225,53 @@ Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
     expect(result.courseName).toBe('APSC 999 – Introduction to Widget Engineering');
   });
 
-  it('produces the same clean schedule shape on a differently-worded syllabus, including recurring meeting/office-hours rows', async () => {
+  it('produces the same clean schedule shape on a differently-worded syllabus', async () => {
     const result = await parseSyllabusText(apsc999Text);
     const titles = result.assignments.map((a) => a.title);
 
-    expect(titles).toEqual([
-      'First class',
-      'Midterm exam',
-      'Last class',
-      'Final exam',
-      'Class Meeting (Mon, Wed) — EME-1101',
-      'Office Hours (Wed) — EME 3311'
-    ]);
+    // Class meetings/office hours are deliberately NOT in the schedule
+    // table — they're recurring, not one-off dated items, and are instead
+    // offered through the recurrence picker (parseClassScheduleOptions).
+    expect(titles).toEqual(['First class', 'Midterm exam', 'Last class', 'Final exam']);
     const midterm = result.assignments.find((a) => a.title === 'Midterm exam');
     const finalExam = result.assignments.find((a) => a.title === 'Final exam');
     expect(midterm?.weightPercent).toBe(30);
     expect(finalExam?.weightPercent).toBe(60);
     expect(finalExam?.dueDate).toBe('');
-
-    // Neither recurring pattern is a graded item, and the review table
-    // needs to allow (not fabricate) an empty weight for both.
-    const classMeeting = result.assignments.find((a) => a.title.startsWith('Class Meeting'));
-    const officeHours = result.assignments.find((a) => a.title.startsWith('Office Hours'));
-    expect(classMeeting?.weightPercent).toBeNull();
-    expect(officeHours?.weightPercent).toBeNull();
-    // Anchored to the term's first-class date so they show up on the
-    // calendar/table instead of floating with no date.
-    expect(classMeeting?.dueDate).toBe('2026-09-07');
-    expect(officeHours?.dueDate).toBe('2026-09-07');
   });
 
   it('leaves aiPolicy null when the syllabus genuinely has no AI/academic-integrity section', async () => {
     const result = await parseSyllabusText(apsc999Text);
     expect(result.policies?.aiPolicy).toBeNull();
+  });
+
+  it('offers one class-schedule option per section, for the recurrence picker dropdown', async () => {
+    const result = await parseSyllabusText(apsc999Text);
+    const options = parseClassScheduleOptions(result.policies?.classMeetings);
+
+    expect(options).toHaveLength(2);
+    expect(options[0]).toMatchObject({ section: '101', days: [1, 3], startTime: '13:00', endTime: '14:30', location: 'EME-1101' });
+    expect(options[1]).toMatchObject({ section: '102', days: [1, 3], startTime: '15:00', endTime: '16:30', location: 'EME-1101' });
+  });
+
+  it('extracts required textbook/calculator into equipment, and strips them out of contacts', async () => {
+    const result = await parseSyllabusText(apsc999Text);
+
+    expect(result.policies?.equipment?.toLowerCase()).toContain('foundations of widget design');
+    expect(result.policies?.equipment?.toLowerCase()).toContain('ti-36x pro');
+    expect(result.policies?.contacts?.toLowerCase()).not.toContain('foundations of widget design');
+    expect(result.policies?.contacts?.toLowerCase()).not.toContain('ti-36x pro');
+    expect(result.policies?.contacts?.toLowerCase()).toContain('drop-in hours');
+  });
+
+  it('captures a wrapped textbook citation continuation line, not just the labeled first line', async () => {
+    // "Textbook ..., 4th edition,\nPearson, 2023" — the citation wraps onto
+    // a second physical line with no label of its own. Matching only lines
+    // that start with "Textbook" would truncate the citation and leave
+    // "Pearson, 2023" as an orphan fragment inside contacts instead.
+    const result = await parseSyllabusText(apsc999Text);
+
+    expect(result.policies?.equipment?.toLowerCase()).toContain('pearson, 2023');
+    expect(result.policies?.contacts?.toLowerCase()).not.toContain('pearson, 2023');
   });
 });

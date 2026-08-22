@@ -28,16 +28,19 @@ export interface Course {
   classSchedule?: ClassSchedule | null;
 }
 
-// A recurring weekly meeting pattern parsed out of a course's classMeetings
-// policy text (e.g. "Tuesday and Thursday, 2:00 – 3:30 PM, ASC-140"), used to
+// A recurring weekly meeting pattern, either parsed out of a course's
+// classMeetings policy text (e.g. "Tuesday and Thursday, 2:00 – 3:30 PM,
+// ASC-140") or set/edited by the user in the recurrence picker, used to
 // render recurring class-time chips on the calendar. Not persisted as
 // individual Assignment rows — computed/displayed on the fly so it can't
 // clutter the dashboard's deadline list or affect grade weight totals.
 export interface ClassSchedule {
+  section: string | null; // e.g. "101" — which section this pattern is for, when a syllabus lists more than one
   days: number[]; // 0=Sunday..6=Saturday, matching Date#getDay()
   startTime: string | null; // HH:mm 24h
   endTime: string | null; // HH:mm 24h
   location: string | null;
+  until: string | null; // YYYY-MM-DD — last date the recurrence applies to (e.g. the term's last class); null = unbounded
 }
 
 // Free-text policy blocks pulled from a syllabus. Each field is null (not an
@@ -51,6 +54,7 @@ export interface CoursePolicies {
   keyDates: string | null;
   classMeetings: string | null;
   topics: string | null;
+  equipment: string | null; // required textbook(s), calculator, other required materials
 }
 
 export interface ExtractedAssignment {

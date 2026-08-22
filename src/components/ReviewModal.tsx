@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { ExtractionResult, ExtractedAssignment, AssignmentType, CoursePolicies } from '../types';
+import { ExtractionResult, ExtractedAssignment, AssignmentType, CoursePolicies, ClassSchedule } from '../types';
 import { X, Plus, Trash2, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { parseClassScheduleOptions } from '../utils/aiParser';
+import { ClassScheduleEditor } from './ClassScheduleEditor';
 
 const EMPTY_POLICIES: CoursePolicies = {
   gradingBreakdown: null,
@@ -9,18 +11,20 @@ const EMPTY_POLICIES: CoursePolicies = {
   aiPolicy: null,
   keyDates: null,
   classMeetings: null,
-  topics: null
+  topics: null,
+  equipment: null
 };
 
-// Key dates and the grading breakdown are deliberately NOT shown here even
-// though they're still extracted (into policies.keyDates/gradingBreakdown) —
-// that data already drives the schedule table above (dated rows, and the
-// Weight % column via weightsDict), so repeating it as a raw text block
-// here would just duplicate what's already correctly represented above it.
-// This panel is only for what the schedule table can't show: recurring
-// meeting time/location, the topic/week breakdown, and prose policies.
+// Key dates, the grading breakdown, and classMeetings are deliberately NOT
+// shown as raw text here. Key dates/grading already drive the schedule
+// table above (dated rows, the Weight % column). classMeetings drives the
+// recurrence editor instead (below the table) — repeating any of them here
+// as a text block would just duplicate what's already correctly
+// represented elsewhere. This panel is only for what neither can show:
+// required textbook/calculator, the topic/week breakdown, and prose
+// policies.
 const POLICY_FIELDS: { key: keyof CoursePolicies; label: string; placeholder: string }[] = [
-  { key: 'classMeetings', label: 'Class Meetings', placeholder: 'No class meeting times/location found.' },
+  { key: 'equipment', label: 'Equipment & Materials', placeholder: 'No required textbook, calculator, or materials found.' },
   { key: 'topics', label: 'Topics / Schedule', placeholder: 'No topics or weekly schedule found.' },
   { key: 'lateWork', label: 'Late Work / Attendance', placeholder: 'No late-work or attendance policy found.' },
   { key: 'contacts', label: 'Contacts & Logistics', placeholder: 'No office hours, contacts, or logistics found.' },
@@ -38,7 +42,8 @@ interface ReviewModalProps {
     instructor: string,
     semester: string,
     assignments: ExtractedAssignment[],
-    policies: CoursePolicies
+    policies: CoursePolicies,
+    classSchedule: ClassSchedule | null
   ) => void;
 }
 
@@ -56,6 +61,19 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const [items, setItems] = useState<ExtractedAssignment[]>([...extraction.assignments]);
   const [policies, setPolicies] = useState<CoursePolicies>({ ...EMPTY_POLICIES, ...extraction.policies });
   const [policiesExpanded, setPoliciesExpanded] = useState(false);
+
+  const classScheduleOptions = React.useMemo(
+    () => parseClassScheduleOptions(extraction.policies?.classMeetings),
+    [extraction.policies?.classMeetings]
+  );
+  const [classSchedule, setClassSchedule] = useState<ClassSchedule | null>(() => {
+    const first = classScheduleOptions[0];
+    if (!first) return null;
+    // Default "repeats until" to the term's last-class date when we found
+    // one, since that's almost always what a student actually wants.
+    const lastClass = extraction.assignments.find((a) => /last class/i.test(a.title));
+    return { ...first, until: lastClass?.dueDate || null };
+  });
 
   const handleUpdatePolicy = (key: keyof CoursePolicies, value: string) => {
     setPolicies((prev) => ({ ...prev, [key]: value }));
@@ -84,7 +102,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
   const handleConfirmSave = () => {
     if (!courseName.trim()) return;
-    onSave(courseName, courseCode, color, instructor, semester, items, policies);
+    onSave(courseName, courseCode, color, instructor, semester, items, policies, classSchedule);
   };
 
   const totalWeight = items.reduce((acc, curr) => acc + (curr.weightPercent || 0), 0);
@@ -256,6 +274,15 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Recurring Class Schedule */}
+        <div className="rounded-2xl border border-slate-200 bg-white mb-6 p-4">
+          <span className="font-heading text-sm font-extrabold text-caplen-navy">Class Schedule</span>
+          <p className="text-[11px] text-caplen-muted font-medium mb-3">
+            Verify the days and time before adding — this drives the recurring class chips on your calendar.
+          </p>
+          <ClassScheduleEditor options={classScheduleOptions} value={classSchedule} onChange={setClassSchedule} />
         </div>
 
         {/* Policies */}

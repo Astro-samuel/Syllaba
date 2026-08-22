@@ -46,6 +46,10 @@ const buildClassMeetingItems = (courses: Course[], daysToCheck: Date[]): Assignm
     for (const course of courses) {
       if (!course.classSchedule?.days.includes(dayOfWeek)) continue;
       const dateStr = format(day, 'yyyy-MM-dd');
+      // "Repeats until" is inclusive and optional — an unset value means
+      // the recurrence has no known end (still bounded to whatever range
+      // is currently on screen, since this is computed fresh per render).
+      if (course.classSchedule.until && dateStr > course.classSchedule.until) continue;
       items.push({
         id: `meeting_${course.id}_${dateStr}`,
         courseId: course.id,

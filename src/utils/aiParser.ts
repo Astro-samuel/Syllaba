@@ -9,20 +9,9 @@ const DAY_NAME_TO_INDEX: { [key: string]: number } = {
   sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6
 };
 
-/**
- * Pulls a recurring weekly meeting pattern out of a course's classMeetings
- * policy text — e.g. "Class meetings\nSection Days and time Room\n101
- * Tuesday and Thursday, 2:00 – 3:30 PM ASC-140" — for rendering recurring
- * class-time chips on the calendar. When a syllabus lists times per section
- * (101/102/...), the first section's time is used; a student is only
- * enrolled in one, and the days are almost always identical across
- * sections anyway. Returns null rather than a guess when no day name or no
- * time range is found.
- */
-export function parseClassSchedule(classMeetingsText: string | null | undefined): ClassSchedule | null {
-  if (!classMeetingsText) return null;
-
-  const dayMatches = classMeetingsText.match(/\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/gi);
+/** Core day/time/location parse shared by the per-section and whole-block paths below. */
+function parseScheduleFragment(fragment: string): { days: number[]; startTime: string | null; endTime: string | null; location: string | null } | null {
+  const dayMatches = fragment.match(/\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/gi);
   if (!dayMatches) return null;
   const days = Array.from(new Set(dayMatches.map((d) => DAY_NAME_TO_INDEX[d.toLowerCase().substring(0, 3)]))).sort(
     (a, b) => a - b
@@ -31,7 +20,7 @@ export function parseClassSchedule(classMeetingsText: string | null | undefined)
 
   let startTime: string | null = null;
   let endTime: string | null = null;
-  const rangeMatch = classMeetingsText.match(/(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  const rangeMatch = fragment.match(/(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   if (rangeMatch) {
     const meridiem = rangeMatch[5].toLowerCase();
     const to24Hour = (hh: string, mm: string) => {
@@ -47,9 +36,43 @@ export function parseClassSchedule(classMeetingsText: string | null | undefined)
   // A trailing room/building code sharing the line with the time, e.g.
   // "ASC-140" — letters followed by digits, distinguishes it from a bare
   // section number ("101") which has no leading letters.
-  const locationMatch = classMeetingsText.match(/\b([A-Z]{2,6}[-\s]?\d{2,4}[A-Z]?)\b/);
+  const locationMatch = fragment.match(/\b([A-Z]{2,6}[-\s]?\d{2,4}[A-Z]?)\b/);
 
   return { days, startTime, endTime, location: locationMatch ? locationMatch[1] : null };
+}
+
+/**
+ * Pulls every recurring weekly meeting pattern out of a course's
+ * classMeetings policy text — e.g. "Class meetings\nSection Days and time
+ * Room\n101 Tuesday and Thursday, 2:00 – 3:30 PM ASC-140\n102 Tuesday and
+ * Thursday, 12:30 – 2:00 PM ASC-140" — one option per section when the
+ * syllabus lists a table of them, so the review UI can offer a dropdown for
+ * the student to pick their actual section instead of guessing the first
+ * one. Falls back to a single whole-block parse when there's no per-row
+ * section structure. Returns [] rather than a guess when nothing parses.
+ */
+export function parseClassScheduleOptions(classMeetingsText: string | null | undefined): ClassSchedule[] {
+  if (!classMeetingsText) return [];
+
+  const perSectionRows = classMeetingsText
+    .split('\n')
+    .map((line) => {
+      const sectionMatch = line.match(/^(\d{2,3})\s+(.*)$/);
+      if (!sectionMatch) return null;
+      const parsed = parseScheduleFragment(sectionMatch[2]);
+      return parsed ? ({ section: sectionMatch[1], ...parsed, until: null } as ClassSchedule) : null;
+    })
+    .filter((row): row is ClassSchedule => row !== null);
+
+  if (perSectionRows.length > 0) return perSectionRows;
+
+  const wholeBlock = parseScheduleFragment(classMeetingsText);
+  return wholeBlock ? [{ section: null, ...wholeBlock, until: null } as ClassSchedule] : [];
+}
+
+/** Convenience wrapper for callers that just want one pattern (the first section, if any). */
+export function parseClassSchedule(classMeetingsText: string | null | undefined): ClassSchedule | null {
+  return parseClassScheduleOptions(classMeetingsText)[0] || null;
 }
 
 export const PRESET_SYLLABI: PresetSyllabus[] = [
@@ -255,7 +278,12 @@ export async function parseSyllabusText(
 // out of a syllabus, plus other common syllabus headings that only matter as
 // stop boundaries (so e.g. a grading-breakdown block doesn't run on and
 // swallow the late-policy section right after it).
-const POLICY_SECTION_STARTS: Record<keyof CoursePolicies, RegExp> = {
+// 'equipment' is deliberately excluded here — see extractEquipmentText
+// below. It isn't a heading-bounded section like the rest; a syllabus lists
+// textbook/calculator as individual labeled rows inside the Quick Facts
+// table with no sub-heading of their own, so it's pulled out by scanning
+// for those specific labels instead of a heading + stop-boundary.
+const POLICY_SECTION_STARTS: Record<Exclude<keyof CoursePolicies, 'equipment'>, RegExp> = {
   gradingBreakdown: /(?:grading breakdown|assessment and grading|evaluation\s*&?\s*grading|grading scheme|course grades)/i,
   lateWork: /(?:late (?:policy|work|submissions?)|oops tokens?|attendance(?: policy)?|makeup policy)/i,
   contacts: /(?:office hours|drop-in(?:\s*\(office\))? hours|markers?\b|getting help|contact(?:s|\sinformation)?)/i,
@@ -267,6 +295,17 @@ const POLICY_SECTION_STARTS: Record<keyof CoursePolicies, RegExp> = {
   topics: /^topics\s*$|schedule of topics|weekly schedule|week-by-week topics/im
 };
 
+// A line is "equipment" when it starts with one of these labels. Reused to
+// strip the same lines back out of `contacts` (see extractCoursePolicies)
+// since they'd otherwise get swept into it — Textbook/Calculator sit in the
+// same Quick Facts table right after the Office/Drop-in-hours row.
+const EQUIPMENT_LINE_PATTERN = /^(?:free open )?textbook\b|^calculator\b|^required materials?\b|^equipment\b/i;
+
+// The other (non-equipment) Quick Facts table rows — used only to recognize
+// where an equipment item's *wrapped continuation* ends, alongside every
+// other known heading below.
+const QUICK_FACTS_OTHER_LABELS = /^(?:instructor|email|office|drop-in hours|course website)\b/i;
+
 // Deliberately excludes ambiguous single words like "assignments" — a
 // grading-table row ("Assignments (marked on attempt): 5%") starts with
 // that word too, which would truncate the grading-breakdown capture after
@@ -274,6 +313,55 @@ const POLICY_SECTION_STARTS: Record<keyof CoursePolicies, RegExp> = {
 // sentence or table row are listed here.
 const OTHER_KNOWN_HEADINGS =
   /(?:welcome|quick facts|how this course works|course description|learning outcomes|class time|what a normal week|schedule of assignments|key deadlines|supplemental learning|weekly announcements|if something|telling me|engineering accreditation|academic concessions|intellectual property|final examination|grading practices|disability resource|equity and inclusion|student learning hub|health\s*&?\s*wellness|global engagement|resource links|safewalk)/im;
+
+function isKnownHeadingLine(line: string): boolean {
+  if (QUICK_FACTS_OTHER_LABELS.test(line) || OTHER_KNOWN_HEADINGS.test(line)) return true;
+  return Object.values(POLICY_SECTION_STARTS).some((pattern) => {
+    const flags = pattern.flags.includes('i') ? pattern.flags : pattern.flags + 'i';
+    return new RegExp(pattern.source, flags).test(line);
+  });
+}
+
+/**
+ * Pulls every "Textbook"/"Free open textbook"/"Calculator"/"Required
+ * materials" item out of the syllabus, including each one's wrapped
+ * continuation line(s) — a long textbook citation almost always wraps onto
+ * a second physical line with no label of its own ("...Foundations of
+ * Widget Design, 4th edition,\nPearson, 2023"), so matching only lines that
+ * start with the label would truncate every multi-line item and leave the
+ * orphaned continuation dangling in whatever section happens to follow.
+ * Also returns exactly which lines it consumed, so callers can strip the
+ * same lines back out of other fields (`contacts`) that would otherwise
+ * have swept them in.
+ */
+function extractEquipmentText(text: string): { text: string | null; consumedLines: Set<string> } {
+  const blocks: string[] = [];
+  const consumedLines = new Set<string>();
+  let current: string[] | null = null;
+
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (current) blocks.push(current.join(' '));
+      current = null;
+      continue;
+    }
+    if (EQUIPMENT_LINE_PATTERN.test(line)) {
+      if (current) blocks.push(current.join(' '));
+      current = [line];
+      consumedLines.add(line);
+    } else if (current && !isKnownHeadingLine(line)) {
+      current.push(line);
+      consumedLines.add(line);
+    } else {
+      if (current) blocks.push(current.join(' '));
+      current = null;
+    }
+  }
+  if (current) blocks.push(current.join(' '));
+
+  return { text: blocks.length > 0 ? blocks.join('\n') : null, consumedLines };
+}
 
 /**
  * Pulls a free-text block out of the syllabus starting at the first heading
@@ -308,9 +396,27 @@ function extractSection(text: string, startPattern: RegExp, excludeSelf: RegExp)
 
 function extractCoursePolicies(text: string): CoursePolicies {
   const result = {} as CoursePolicies;
-  for (const key of Object.keys(POLICY_SECTION_STARTS) as (keyof CoursePolicies)[]) {
+  for (const key of Object.keys(POLICY_SECTION_STARTS) as (keyof typeof POLICY_SECTION_STARTS)[]) {
     result[key] = extractSection(text, POLICY_SECTION_STARTS[key], POLICY_SECTION_STARTS[key]);
   }
+
+  const equipment = extractEquipmentText(text);
+  result.equipment = equipment.text;
+
+  // Equipment lines (and their wrapped continuations) commonly get swept
+  // into `contacts` since they sit in the same Quick Facts table right
+  // after office-hours/email rows with no sub-heading to bound them out —
+  // strip them back out now that they have their own field, so the same
+  // textbook/calculator text doesn't show up in two panels.
+  if (result.contacts) {
+    const withoutEquipment = result.contacts
+      .split('\n')
+      .filter((l) => !equipment.consumedLines.has(l.trim()))
+      .join('\n')
+      .trim();
+    result.contacts = withoutEquipment.length > 3 ? withoutEquipment : null;
+  }
+
   return result;
 }
 
@@ -667,42 +773,6 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     });
   }
 
-  // 5. Representative rows for recurring class meetings and office hours,
-  // so the parsed day/time can be visually verified on the review table
-  // before being relied on — the same parsed pattern also drives the
-  // calendar's recurring chips once the course is saved. Anchored to the
-  // term's first-class date when known, since neither is a one-off item
-  // with a real date of its own.
-  const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const firstClassDate = assignments.find((a) => /first class/i.test(a.title))?.dueDate || '';
-
-  const classSchedule = parseClassSchedule(policies.classMeetings);
-  if (classSchedule) {
-    assignments.push({
-      title: `Class Meeting (${classSchedule.days.map((d) => DAY_ABBR[d]).join(', ')})${classSchedule.location ? ` — ${classSchedule.location}` : ''}`,
-      dueDate: firstClassDate,
-      dueTime: classSchedule.startTime,
-      type: 'other',
-      weightPercent: null
-    });
-  }
-
-  // Scoped to just the office-hours/drop-in-hours line within the contacts
-  // block, not the whole thing — that block also mentions the textbook,
-  // calculator policy, etc., and scanning all of it for weekday names risks
-  // picking up an unrelated day mentioned in passing.
-  const officeHoursLine = policies.contacts?.split('\n').find((l) => /office hours|drop-in/i.test(l)) || null;
-  const officeHoursSchedule = parseClassSchedule(officeHoursLine);
-  if (officeHoursSchedule) {
-    assignments.push({
-      title: `Office Hours (${officeHoursSchedule.days.map((d) => DAY_ABBR[d]).join(', ')})${officeHoursSchedule.location ? ` — ${officeHoursSchedule.location}` : ''}`,
-      dueDate: firstClassDate,
-      dueTime: officeHoursSchedule.startTime,
-      type: 'other',
-      weightPercent: null
-    });
-  }
-
   if (assignments.length === 0) {
     assignments.push(
       { title: 'Assignment 1: Fundamentals', dueDate: formatDate(4), dueTime: '23:59', type: 'homework', weightPercent: 10 },
@@ -757,10 +827,11 @@ async function parseWithExternalLLM(text: string, apiKey: string): Promise<Extra
     "aiPolicy": "string_or_null",
     "keyDates": "string_or_null",
     "classMeetings": "string_or_null",
-    "topics": "string_or_null"
+    "topics": "string_or_null",
+    "equipment": "string_or_null"
   }
 }
-For "policies", copy the relevant syllabus text verbatim: grading weight table, late/attendance/makeup rules, instructor/office-hours/marker contacts, generative-AI/academic-integrity policy, key dates (first/last class, exam dates, other named dates that aren't graded assignments), class meeting days/times/room, and the topics/weekly schedule (chapter or week-by-week breakdown), respectively. Use null for any category the syllabus doesn't mention — never invent one. If a date is ambiguous, default to the current year 2026. Respond ONLY with valid JSON.`,
+For "policies", copy the relevant syllabus text verbatim: grading weight table, late/attendance/makeup rules, instructor/office-hours/marker contacts (excluding textbook/calculator/required-materials lines — those go in "equipment" instead), generative-AI/academic-integrity policy, key dates (first/last class, exam dates, other named dates that aren't graded assignments), class meeting days/times/room, the topics/weekly schedule (chapter or week-by-week breakdown), and required textbook(s)/calculator/other required materials, respectively. Use null for any category the syllabus doesn't mention — never invent one. If a date is ambiguous, default to the current year 2026. Respond ONLY with valid JSON.`,
       messages: [{ role: 'user', content: text }]
     })
   });

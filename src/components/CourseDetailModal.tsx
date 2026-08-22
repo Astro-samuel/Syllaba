@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Course, Assignment, CoursePolicies } from '../types';
+import { Course, Assignment, CoursePolicies, ClassSchedule } from '../types';
 import { X, CheckCircle2, Circle, Save } from 'lucide-react';
+import { parseClassScheduleOptions } from '../utils/aiParser';
+import { ClassScheduleEditor } from './ClassScheduleEditor';
 
-// Key dates and the grading breakdown are deliberately NOT shown here —
-// see the matching comment in ReviewModal.tsx. They already drive the
-// Assignments tab (dated rows) and its Weight % column.
+// Key dates, the grading breakdown, and classMeetings are deliberately NOT
+// shown here — see the matching comment in ReviewModal.tsx. Key dates/
+// grading already drive the Assignments tab (dated rows, Weight % column);
+// classMeetings drives the recurrence editor below instead.
 const POLICY_FIELDS: { key: keyof CoursePolicies; label: string; placeholder: string }[] = [
-  { key: 'classMeetings', label: 'Class Meetings', placeholder: 'No class meeting times/location recorded.' },
+  { key: 'equipment', label: 'Equipment & Materials', placeholder: 'No required textbook, calculator, or materials recorded.' },
   { key: 'topics', label: 'Topics / Schedule', placeholder: 'No topics or weekly schedule recorded.' },
   { key: 'lateWork', label: 'Late Work / Attendance', placeholder: 'No late-work or attendance policy recorded.' },
   { key: 'contacts', label: 'Contacts & Logistics', placeholder: 'No office hours, contacts, or logistics recorded.' },
@@ -19,6 +22,7 @@ interface CourseDetailModalProps {
   onClose: () => void;
   onToggleComplete: (id: string) => void;
   onSavePolicies: (policies: CoursePolicies) => void;
+  onSaveClassSchedule: (classSchedule: ClassSchedule | null) => void;
 }
 
 export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
@@ -26,7 +30,8 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
   assignments,
   onClose,
   onToggleComplete,
-  onSavePolicies
+  onSavePolicies,
+  onSaveClassSchedule
 }) => {
   const [tab, setTab] = useState<'assignments' | 'policies'>('assignments');
   const [policies, setPolicies] = useState<CoursePolicies>({
@@ -37,17 +42,30 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
     keyDates: null,
     classMeetings: null,
     topics: null,
+    equipment: null,
     ...course.policies
   });
+  const [classSchedule, setClassSchedule] = useState<ClassSchedule | null>(course.classSchedule || null);
   const [dirty, setDirty] = useState(false);
+
+  const classScheduleOptions = React.useMemo(
+    () => parseClassScheduleOptions(course.policies?.classMeetings),
+    [course.policies?.classMeetings]
+  );
 
   const handleUpdatePolicy = (key: keyof CoursePolicies, value: string) => {
     setPolicies((prev) => ({ ...prev, [key]: value }));
     setDirty(true);
   };
 
+  const handleUpdateClassSchedule = (schedule: ClassSchedule | null) => {
+    setClassSchedule(schedule);
+    setDirty(true);
+  };
+
   const handleSave = () => {
     onSavePolicies(policies);
+    onSaveClassSchedule(classSchedule);
     setDirty(false);
   };
 
@@ -127,6 +145,18 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
 
         {tab === 'policies' && (
           <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <span className="font-heading text-sm font-extrabold text-caplen-navy">Class Schedule</span>
+              <p className="text-[11px] text-caplen-muted font-medium mb-3">
+                Drives the recurring class chips on your calendar.
+              </p>
+              <ClassScheduleEditor
+                options={classScheduleOptions}
+                value={classSchedule}
+                onChange={handleUpdateClassSchedule}
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {POLICY_FIELDS.map(({ key, label, placeholder }) => (
                 <div key={key}>
