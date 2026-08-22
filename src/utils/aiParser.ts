@@ -316,10 +316,54 @@ function parseWithLocalNLP(text: string): ExtractionResult {
   }
 
   // 3. Extract Grading Breakdown Weights Dictionary
+  //
+  // Reuses the same boundary logic as extractCoursePolicies (below) instead
+  // of a separate hand-rolled lookahead. That lookahead required a literal
+  // "LATE POLICY"/"OFFICE HOURS" heading to know where the grading block
+  // ends — headings this real syllabus doesn't use verbatim ("Late work and
+  // oops tokens", "Drop-in (Office) hours") — so it silently ran all the way
+  // to the end of the document. Every line after "Assessment and grading"
+  // was then treated as part of the grading table, including "AI tools are
+  // not permitted during the midterm or the final exam." several sections
+  // later, which happens to also satisfy the assignment-schedule keyword
+  // check below and got scanned as if it were its own dated deliverable.
   const weightsDict: { [key: string]: number } = {};
-  const breakdownMatch = text.match(/(?:GRADING BREAKDOWN|ASSESSMENT AND GRADING|EVALUATION|GRADING SCHEME|COURSE GRADES)[\s\S]*?(?=SCHEDULE|KEY DEADLINES|LATE POLICY|OFFICE HOURS|$)/i);
-  if (breakdownMatch) {
-    const bLines = breakdownMatch[0].split('\n');
+  // Computed once, up front, and reused both for the weight table below and
+  // for the returned ExtractionResult — not recomputed at the end — so the
+  // exclusion set built from it (next) is guaranteed to match exactly what
+  // ends up in the policies fields.
+  const policies = extractCoursePolicies(text);
+  const gradingBreakdownText = policies.gradingBreakdown;
+  // Every line belonging to a prose/table policy block is excluded from the
+  // assignment-schedule scan further down. Two reasons:
+  //  1. A grading-table row describes a *category's* weight ("Midterm exam
+  //     (1 hour)   35%   ..."), not an individual dated item — scanning it
+  //     as one would double-count that exam's weight alongside the actual
+  //     schedule entry for it (e.g. in Key Dates).
+  //  2. A policy sentence that merely *mentions* an assignment-ish word in
+  //     passing ("AI tools are not permitted during the midterm or the
+  //     final exam.") would otherwise satisfy the assignment-schedule
+  //     keyword check below and get scanned as if it were its own dated
+  //     deliverable, inheriting whatever date happened to be active.
+  // Key Dates is deliberately excluded from this exclusion set — that's
+  // where genuine dated items (exams, first/last class) actually live in
+  // this "everything in one table" syllabus format.
+  const excludedFromSchedule: (keyof CoursePolicies)[] = [
+    'gradingBreakdown',
+    'lateWork',
+    'contacts',
+    'aiPolicy',
+    'classMeetings',
+    'topics'
+  ];
+  const nonScheduleLines = new Set(
+    excludedFromSchedule
+      .flatMap((key) => (policies[key] || '').split('\n'))
+      .map((l) => l.trim())
+      .filter(Boolean)
+  );
+  if (gradingBreakdownText) {
+    const bLines = gradingBreakdownText.split('\n');
     for (const bLine of bLines) {
       // "Label: NN%" (prose-style breakdown) or "Label   NN%   ..." (a
       // rendered table row, column-separated by whitespace with no colon —
@@ -355,6 +399,11 @@ function parseWithLocalNLP(text: string): ExtractionResult {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
+    // Skip lines belonging to a prose/table policy section entirely here
+    // (including header-date tracking below) so they can't masquerade as
+    // their own schedule entry or reset the active date.
+    if (nonScheduleLines.has(line)) continue;
+
     if (/schedule of assignments|key deadlines|important dates|course schedule|assignment schedule/i.test(line)) {
       inScheduleSection = true;
       continue;
@@ -375,7 +424,15 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       const d = parseInt(headerSlashMatch[2], 10);
       const y = headerSlashMatch[3].length === 2 ? 2000 + parseInt(headerSlashMatch[3], 10) : parseInt(headerSlashMatch[3], 10);
       currentActiveDate = format(new Date(y, m, d), 'yyyy-MM-dd');
-    } else if (headerMonthMatch) {
+    } else if (headerMonthMatch && !/^[a-z]/.test(line)) {
+      // A line starting with a lowercase letter is almost always the
+      // physically-wrapped continuation of the previous line's sentence
+      // ("...the December examination period, which is\ntravel before the
+      // end of...", wrapped the other way), not a new date-header row —
+      // real header/list rows in this format start with a capitalized
+      // label ("First class", "Midterm exam"). Without this guard, a
+      // mid-paragraph date mention silently overwrites the active date for
+      // every item that follows it.
       const monthStr = headerMonthMatch[1].toLowerCase().substring(0, 3);
       const mIdx = monthNames.indexOf(monthStr);
       if (mIdx !== -1) {
@@ -390,7 +447,7 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     if (!inScheduleSection) continue;
 
     const isAssignmentLine =
-      /due|homework|lab report|midterm|final project|final exam|quiz|reading|proposal|problem set|pset|assignment|paper|presentation|case study/i.test(line) &&
+      /due|homework|lab report|midterm|final project|final exam|quiz|reading|proposal|problem set|pset|assignment|paper|presentation|case study|first class|last class/i.test(line) &&
       !/^course|^grading|^schedule|^late policy|^office hours|^meeting|^lab:/i.test(line) &&
       !line.startsWith('(Covers') &&
       !/final exam period/i.test(line);
@@ -402,11 +459,17 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     else if (/project|proposal|capstone|paper|essay|presentation|case study/i.test(line)) type = 'project';
     else if (/quiz/i.test(line)) type = 'quiz';
     else if (/reading|annotation|chapter/i.test(line)) type = 'reading';
+    else if (/first class|last class/i.test(line)) type = 'other';
 
-    // If the syllabus itself says this item's date/time is TBD, that overrides
-    // any inherited section date — leave it blank for the student to fill in
-    // rather than guessing a date the document doesn't actually give.
-    const lineHasTBD = /\btbd\b/i.test(line);
+    // If the syllabus itself says this item's date/time is TBD or explicitly
+    // unknown yet, that overrides any inherited section date — leave it
+    // blank for the student to fill in rather than showing a date the
+    // syllabus never actually gave for this specific item (e.g. "Final exam:
+    // scheduled by the University and announced during the term" is not the
+    // same date as the last day of classes, even though that's what the
+    // currently-active section date would otherwise supply).
+    const lineHasTBD =
+      /\btbd\b|\btba\b|to be announced|scheduled by the university|announced (?:later|during)/i.test(line);
 
     let itemDate = lineHasTBD ? null : currentActiveDate;
     const inlineIso = line.match(/\b(202[5-9]-\d{2}-\d{2})\b/);
@@ -503,11 +566,37 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       // immediately before the first time value would match that inner dash
       // instead and truncate the title mid-time.
       .replace(/[\s,–—-]*(?:due\s*|report due\s*)?\d{1,2}:\d{2}(?:\s*[–—-]\s*\d{1,2}:\d{2})?\s*(?:AM|PM).*$/i, '')
+      // A syllabus shared across multiple sections lists the same exam once
+      // per section ("Midterm exam – Section 101" / "– Section 102") purely
+      // to give each section's own room/time — a given student is only
+      // enrolled in one. Strip the section tag so the deduplication below
+      // (which compares titles) recognizes these as the same graded item
+      // instead of two separate ones that would double the allocated weight.
+      .replace(/\s*[–—-]\s*section\s*\d+\s*/i, ' ')
+      // When the date/time is TBD, the rest of the line is prose explaining
+      // *why* ("Scheduled by the University and announced during the term.
+      // Please do not book travel...") rather than part of the item's name —
+      // cut it at the TBD phrase instead of keeping (and truncating) the
+      // whole explanation as the title.
+      .replace(/\s*[:\-–—]?\s*(?:tbd|tba|to be announced|scheduled by the university|announced (?:later|during)).*$/i, '')
+      // A trailing full calendar date ("Tuesday, September 8, 2026") is
+      // already captured structurally as dueDate — repeating it as text in
+      // the title is redundant.
+      .replace(/[\s,]*(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s*(?:202[4-9])?\s*$/i, '')
       .trim();
 
     if (title.length > 75) {
       title = title.substring(0, 72) + '...';
     }
+
+    // Skip a duplicate of an item already captured for this same date (see
+    // the section-tag strip above) — otherwise a per-section repeat of the
+    // same exam counts its weight twice toward the total.
+    const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
+    const isDuplicate = assignments.some(
+      (existing) => existing.dueDate === itemDate && existing.title.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedTitle
+    );
+    if (isDuplicate) continue;
 
     assignments.push({
       title,
@@ -534,7 +623,7 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     instructor,
     semester,
     assignments,
-    policies: extractCoursePolicies(text)
+    policies
   };
 }
 

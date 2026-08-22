@@ -92,12 +92,55 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     // "Thursday, November 5, 2:00 – 3:30 PM, ASC-140" — the only dash in the
     // line sits *inside* the time range, not before it. A title-stripper
     // that requires a dash immediately before the first time value matches
-    // that inner dash instead and truncates the title mid-number.
+    // that inner dash instead and truncates the title mid-number. The
+    // section tag and the now-redundant date text (already captured as
+    // dueDate) are also stripped, leaving a clean "Midterm exam" title.
     const result = await parseSyllabusText(apsc179Text);
     const midterm = result.assignments.find((a) => a.title.toLowerCase().includes('midterm'));
 
-    expect(midterm?.title).not.toMatch(/2:00$/);
-    expect(midterm?.title).toBe('Midterm exam – Section 101 Thursday, November 5');
+    expect(midterm?.title).not.toMatch(/2:00/);
+    expect(midterm?.title).toBe('Midterm exam');
+  });
+
+  it('deduplicates the same exam listed once per section so its weight is not double-counted', async () => {
+    // The real syllabus lists "Midterm exam – Section 101" and
+    // "– Section 102" as two separate lines (each section's own room/time),
+    // but a given student is enrolled in exactly one section. Counting both
+    // would double the item's weight in the allocated-weight total.
+    const textWithBothSections = apsc179Text.replace(
+      'Midterm exam – Section 101 Thursday, November 5, 2:00 – 3:30 PM, ASC-140',
+      'Midterm exam – Section 101 Thursday, November 5, 2:00 – 3:30 PM, ASC-140\nMidterm exam – Section 102 Thursday, November 5, 12:30 – 2:00 PM, ASC-140'
+    );
+    const result = await parseSyllabusText(textWithBothSections);
+    const midterms = result.assignments.filter((a) => a.title.toLowerCase().includes('midterm'));
+
+    expect(midterms).toHaveLength(1);
+  });
+
+  it('leaves the date blank when the syllabus states it is not yet scheduled, instead of inheriting an unrelated date', async () => {
+    // "Final exam: Scheduled by the University and announced during the
+    // term" is not the last-day-of-classes date, even though that's what
+    // the currently-active section date would otherwise supply. Inserted
+    // inside Key Dates, matching where the real syllabus actually states it.
+    const textWithFinalExam = apsc179Text.replace(
+      'Last class Tuesday, December 8, 2026',
+      'Last class Tuesday, December 8, 2026\nFinal exam Scheduled by the University and announced during the term.'
+    );
+    const result = await parseSyllabusText(textWithFinalExam);
+    const finalExam = result.assignments.find((a) => a.title.toLowerCase().includes('final exam'));
+
+    expect(finalExam?.dueDate).toBe('');
+    expect(finalExam?.title).toBe('Final exam');
+  });
+
+  it('picks up key, non-graded schedule dates (first/last class) as their own schedule items', async () => {
+    const result = await parseSyllabusText(apsc179Text);
+    const firstClass = result.assignments.find((a) => a.title.toLowerCase() === 'first class');
+    const lastClass = result.assignments.find((a) => a.title.toLowerCase() === 'last class');
+
+    expect(firstClass?.dueDate).toBe('2026-09-08');
+    expect(firstClass?.type).toBe('other');
+    expect(lastClass?.dueDate).toBe('2026-12-08');
   });
 
   it('attaches the grading-table weight to an item even when the table has no colon separator', async () => {
