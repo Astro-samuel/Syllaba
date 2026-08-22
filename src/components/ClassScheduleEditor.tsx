@@ -11,6 +11,7 @@ const BLANK_SCHEDULE: ClassSchedule = {
   startTime: null,
   endTime: null,
   location: null,
+  startsOn: null,
   until: null
 };
 
@@ -33,9 +34,9 @@ export const ClassScheduleEditor: React.FC<ClassScheduleEditorProps> = ({ option
   const handleSectionChange = (section: string) => {
     const chosen = options.find((o) => o.section === section);
     if (!chosen) return;
-    // Keep whatever "repeats until" the student already set — that's a
+    // Keep whatever start/end date the student already set — that's a
     // property of the term, not of which section they're in.
-    onChange({ ...chosen, until: value?.until ?? chosen.until });
+    onChange({ ...chosen, startsOn: value?.startsOn ?? chosen.startsOn, until: value?.until ?? chosen.until });
   };
 
   const toggleDay = (day: number) => {
@@ -124,15 +125,28 @@ export const ClassScheduleEditor: React.FC<ClassScheduleEditorProps> = ({ option
         </div>
       </div>
 
+      <div>
+        <label className="block text-[11px] font-bold text-slate-400 uppercase font-heading">Location</label>
+        <input
+          type="text"
+          value={value.location || ''}
+          onChange={(e) => update({ location: e.target.value || null })}
+          placeholder="Room / building"
+          className="mt-1 w-full rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-bold text-caplen-navy focus:outline-none"
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-[11px] font-bold text-slate-400 uppercase font-heading">Location</label>
+          <label className="block text-[11px] font-bold text-slate-400 uppercase font-heading flex items-center gap-1">
+            <Repeat className="h-3 w-3" />
+            Starts on
+          </label>
           <input
-            type="text"
-            value={value.location || ''}
-            onChange={(e) => update({ location: e.target.value || null })}
-            placeholder="Room / building"
-            className="mt-1 w-full rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-bold text-caplen-navy focus:outline-none"
+            type="date"
+            value={value.startsOn || ''}
+            onChange={(e) => update({ startsOn: e.target.value || null })}
+            className="mt-1 w-full rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-mono text-caplen-navy focus:outline-none number-display"
           />
         </div>
         <div>

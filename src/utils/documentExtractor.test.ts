@@ -161,6 +161,11 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(schedule?.startTime).toBe('14:00');
     expect(schedule?.endTime).toBe('15:30');
     expect(schedule?.location).toBe('ASC-140');
+    // Parsed straight from classMeetings text alone, there's no "starts
+    // on"/"repeats until" to infer — the review UI fills those in from the
+    // syllabus's First/Last class dates once both are available.
+    expect(schedule?.startsOn).toBeNull();
+    expect(schedule?.until).toBeNull();
   });
 
   it('returns null for a class schedule when there is no classMeetings text', () => {

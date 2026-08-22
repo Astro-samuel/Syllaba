@@ -60,14 +60,14 @@ export function parseClassScheduleOptions(classMeetingsText: string | null | und
       const sectionMatch = line.match(/^(\d{2,3})\s+(.*)$/);
       if (!sectionMatch) return null;
       const parsed = parseScheduleFragment(sectionMatch[2]);
-      return parsed ? ({ section: sectionMatch[1], ...parsed, until: null } as ClassSchedule) : null;
+      return parsed ? ({ section: sectionMatch[1], ...parsed, startsOn: null, until: null } as ClassSchedule) : null;
     })
     .filter((row): row is ClassSchedule => row !== null);
 
   if (perSectionRows.length > 0) return perSectionRows;
 
   const wholeBlock = parseScheduleFragment(classMeetingsText);
-  return wholeBlock ? [{ section: null, ...wholeBlock, until: null } as ClassSchedule] : [];
+  return wholeBlock ? [{ section: null, ...wholeBlock, startsOn: null, until: null } as ClassSchedule] : [];
 }
 
 /** Convenience wrapper for callers that just want one pattern (the first section, if any). */

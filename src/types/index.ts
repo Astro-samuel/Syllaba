@@ -37,9 +37,10 @@ export interface Course {
 export interface ClassSchedule {
   section: string | null; // e.g. "101" — which section this pattern is for, when a syllabus lists more than one
   days: number[]; // 0=Sunday..6=Saturday, matching Date#getDay()
-  startTime: string | null; // HH:mm 24h
-  endTime: string | null; // HH:mm 24h
+  startTime: string | null; // HH:mm 24h — time of day the meeting starts
+  endTime: string | null; // HH:mm 24h — time of day the meeting ends
   location: string | null;
+  startsOn: string | null; // YYYY-MM-DD — first date the recurrence applies to (e.g. the term's first class); null = unbounded
   until: string | null; // YYYY-MM-DD — last date the recurrence applies to (e.g. the term's last class); null = unbounded
 }
 

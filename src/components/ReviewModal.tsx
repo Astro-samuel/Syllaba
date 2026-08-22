@@ -69,10 +69,12 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const [classSchedule, setClassSchedule] = useState<ClassSchedule | null>(() => {
     const first = classScheduleOptions[0];
     if (!first) return null;
-    // Default "repeats until" to the term's last-class date when we found
-    // one, since that's almost always what a student actually wants.
+    // Default "starts on"/"repeats until" to the term's first/last-class
+    // dates when we found them, since that's almost always what a student
+    // actually wants.
+    const firstClass = extraction.assignments.find((a) => /first class/i.test(a.title));
     const lastClass = extraction.assignments.find((a) => /last class/i.test(a.title));
-    return { ...first, until: lastClass?.dueDate || null };
+    return { ...first, startsOn: firstClass?.dueDate || null, until: lastClass?.dueDate || null };
   });
 
   const handleUpdatePolicy = (key: keyof CoursePolicies, value: string) => {
