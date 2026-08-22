@@ -110,11 +110,16 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const totalWeight = items.reduce((acc, curr) => acc + (curr.weightPercent || 0), 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-5xl rounded-3xl bg-white border border-slate-200/80 p-8 shadow-2xl my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
+      {/* max-h + flex-col keeps the header (close button) and footer
+          (Cancel/Confirm) pinned in view; only the middle content scrolls.
+          This form is tall (schedule table + recurrence editor + 5 policy
+          panels) and used to push the close button off the top of the
+          screen with no way back to it but scrolling the whole card up. */}
+      <div className="relative w-full max-w-5xl max-h-[90vh] rounded-3xl bg-white border border-slate-200/80 shadow-2xl flex flex-col overflow-hidden">
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+        <div className="shrink-0 flex items-center justify-between border-b border-slate-100 px-8 pt-8 pb-4">
           <div className="flex items-center gap-3">
             <div className="h-4 w-4 rounded-full shadow-xs" style={{ backgroundColor: color }} />
             <div>
@@ -137,6 +142,9 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-8 pt-6 pb-6">
 
         {/* Inputs */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-200/60">
@@ -319,8 +327,10 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           )}
         </div>
 
+        </div>
+
         {/* Footer */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-slate-100">
+        <div className="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4 px-8 py-5 border-t border-slate-100">
           <div className="flex items-center gap-4 text-xs text-caplen-muted font-bold">
             <button
               onClick={handleAddItem}

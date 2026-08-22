@@ -208,10 +208,14 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
-      <div className="relative w-full max-w-xl rounded-3xl bg-white border border-slate-200/80 p-8 shadow-2xl">
+      {/* max-h + flex-col keeps the header (close button) and footer (Done)
+          pinned in view; only the middle content scrolls — same fix as
+          ReviewModal/CourseDetailModal, so a long calendar list or an error
+          message can't push the close button out of reach. */}
+      <div className="relative w-full max-w-xl max-h-[90vh] rounded-3xl bg-white border border-slate-200/80 shadow-2xl flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+        <div className="shrink-0 flex items-center justify-between border-b border-slate-100 px-8 pt-8 pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-caplen-navy text-white">
               <Calendar className="h-5 w-5" />
@@ -231,6 +235,9 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-8 pt-6 pb-6">
 
         {/* Google Account Section */}
         <div className="space-y-4">
@@ -449,8 +456,10 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({
 
         </div>
 
+        </div>
+
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+        <div className="shrink-0 px-8 py-5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
           <span className="flex items-center gap-1 text-[11px] font-bold">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
             <span>100% Free & Private — Direct Google Sync</span>

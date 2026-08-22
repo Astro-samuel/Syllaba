@@ -72,10 +72,15 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
   const sortedAssignments = [...assignments].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-3xl rounded-3xl bg-white border border-slate-200/80 p-8 shadow-2xl my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
+      {/* max-h + flex-col keeps the header/close button and tabs pinned in
+          view; only the tab body scrolls internally. A tall Policies tab
+          (recurrence editor + 5 text panels) used to push the close button
+          off the top of the screen with no way back to it but scrolling
+          the whole card back up. */}
+      <div className="relative w-full max-w-3xl max-h-[85vh] rounded-3xl bg-white border border-slate-200/80 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+        <div className="shrink-0 flex items-center justify-between border-b border-slate-100 px-8 pt-8 pb-4">
           <div className="flex items-center gap-3">
             <div className="h-4 w-4 rounded-full shadow-xs" style={{ backgroundColor: course.color }} />
             <div>
@@ -97,7 +102,7 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-2 mb-5">
+        <div className="shrink-0 flex items-center gap-2 px-8 pt-5 pb-5">
           <button
             onClick={() => setTab('assignments')}
             className={`rounded-full px-4 py-1.5 text-xs font-extrabold font-heading transition-colors ${
@@ -116,6 +121,8 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
           </button>
         </div>
 
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-8 pb-8">
         {tab === 'assignments' && (
           <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-slate-200 divide-y divide-slate-100">
             {sortedAssignments.length === 0 && (
@@ -183,6 +190,7 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
