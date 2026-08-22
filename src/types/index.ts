@@ -25,6 +25,19 @@ export interface Course {
   syllabusText?: string;
   createdAt: string;
   policies?: CoursePolicies;
+  classSchedule?: ClassSchedule | null;
+}
+
+// A recurring weekly meeting pattern parsed out of a course's classMeetings
+// policy text (e.g. "Tuesday and Thursday, 2:00 – 3:30 PM, ASC-140"), used to
+// render recurring class-time chips on the calendar. Not persisted as
+// individual Assignment rows — computed/displayed on the fly so it can't
+// clutter the dashboard's deadline list or affect grade weight totals.
+export interface ClassSchedule {
+  days: number[]; // 0=Sunday..6=Saturday, matching Date#getDay()
+  startTime: string | null; // HH:mm 24h
+  endTime: string | null; // HH:mm 24h
+  location: string | null;
 }
 
 // Free-text policy blocks pulled from a syllabus. Each field is null (not an

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Assignment } from '../types';
+import { Assignment, Course } from '../types';
 import {
   format,
   startOfMonth,
@@ -16,10 +16,13 @@ import {
   parseISO,
   isToday
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle, Plus, Repeat } from 'lucide-react';
+import { AddTaskModal } from './AddTaskModal';
 
 interface CalendarViewProps {
   assignments: Assignment[];
+  courses: Course[];
+  onAddTask: (assignment: Omit<Assignment, 'id'>) => void;
 }
 
 type ViewMode = 'month' | 'week';
@@ -28,10 +31,43 @@ const HOUR_HEIGHT = 56; // px per hour row in week view
 const WEEK_START_HOUR_SCROLL = 7; // auto-scroll week view to 7am on open
 const DEFAULT_BLOCK_MINUTES = 60; // assumed duration for a timed deadline block
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ assignments }) => {
+/**
+ * Synthesizes a recurring class-meeting "assignment" for each day in
+ * `daysToCheck` that matches a course's weekly meeting pattern. Never
+ * persisted — computed fresh for whatever date range is currently visible,
+ * so it can't clutter the dashboard's deadline list, affect grade weight
+ * totals, or need its own storage/sync bookkeeping. The synthetic id lets
+ * the UI tell these apart from real assignments (e.g. to skip a checkbox).
+ */
+const buildClassMeetingItems = (courses: Course[], daysToCheck: Date[]): Assignment[] => {
+  const items: Assignment[] = [];
+  for (const day of daysToCheck) {
+    const dayOfWeek = day.getDay();
+    for (const course of courses) {
+      if (!course.classSchedule?.days.includes(dayOfWeek)) continue;
+      const dateStr = format(day, 'yyyy-MM-dd');
+      items.push({
+        id: `meeting_${course.id}_${dateStr}`,
+        courseId: course.id,
+        courseName: course.code,
+        title: `${course.code} Class${course.classSchedule.location ? ` · ${course.classSchedule.location}` : ''}`,
+        dueDate: dateStr,
+        dueTime: course.classSchedule.startTime,
+        type: 'other',
+        weightPercent: null,
+        completed: false,
+        color: course.color
+      });
+    }
+  }
+  return items;
+};
+
+export const CalendarView: React.FC<CalendarViewProps> = ({ assignments, courses, onAddTask }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const weekScrollRef = useRef<HTMLDivElement>(null);
 
   const monthStart = startOfMonth(currentDate);
@@ -45,6 +81,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ assignments }) => {
     end: endOfWeek(currentDate, { weekStartsOn: 0 })
   });
 
+  // Recurring class meetings are computed only for whichever date range is
+  // actually on screen, not persisted or stored alongside real assignments.
+  const visibleDays = viewMode === 'month' ? days : weekDays;
+  const classMeetingItems = buildClassMeetingItems(courses, visibleDays);
+  const displayedAssignments = [...assignments, ...classMeetingItems];
+
   const goNext = () => setCurrentDate((d) => (viewMode === 'month' ? addMonths(d, 1) : addWeeks(d, 1)));
   const goPrev = () => setCurrentDate((d) => (viewMode === 'month' ? subMonths(d, 1) : subWeeks(d, 1)));
   const goToToday = () => {
@@ -53,7 +95,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ assignments }) => {
   };
 
   const getAssignmentsForDay = (day: Date) => {
-    return assignments.filter((item) => {
+    return displayedAssignments.filter((item) => {
       try {
         return isSameDay(parseISO(item.dueDate), day);
       } catch (e) {
@@ -104,6 +146,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ assignments }) => {
               Week
             </button>
           </div>
+
+          <button
+            onClick={() => setIsAddTaskOpen(true)}
+            className="flex items-center gap-1.5 rounded-full bg-caplen-navy px-4 py-1.5 text-xs font-extrabold text-white shadow-xs hover:bg-caplen-navyHover transition-colors font-heading"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add Task</span>
+          </button>
 
           <button
             onClick={goToToday}
@@ -189,9 +239,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ assignments }) => {
                       {dayAssignments.slice(0, 2).map((item) => (
                         <div
                           key={item.id}
-                          className="truncate text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-vibrant-peach text-vibrant-peachText border border-vibrant-peachBorder"
+                          className={`truncate flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-lg border ${
+                            item.id.startsWith('meeting_')
+                              ? 'bg-slate-100 text-slate-600 border-slate-200'
+                              : 'bg-vibrant-peach text-vibrant-peachText border-vibrant-peachBorder'
+                          }`}
                         >
-                          {item.title}
+                          {item.id.startsWith('meeting_') && <Repeat className="h-2.5 w-2.5 shrink-0" />}
+                          <span className="truncate">{item.title}</span>
                         </div>
                       ))}
                       {dayAssignments.length > 2 && (
@@ -232,8 +287,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ assignments }) => {
                         <span className="text-[10px] font-mono font-bold uppercase text-caplen-navy">
                           {item.courseName}
                         </span>
-                        <span className="text-[10px] uppercase font-bold text-vibrant-purpleText bg-vibrant-purple border border-vibrant-purpleBorder px-2 py-0.5 rounded-full">
-                          {item.type}
+                        <span className="text-[10px] uppercase font-bold text-vibrant-purpleText bg-vibrant-purple border border-vibrant-purpleBorder px-2 py-0.5 rounded-full flex items-center gap-1">
+                          {item.id.startsWith('meeting_') && <Repeat className="h-2.5 w-2.5" />}
+                          {item.id.startsWith('meeting_') ? 'Class' : item.type}
                         </span>
                       </div>
                       <h5 className="text-xs font-bold text-caplen-navy mb-1">{item.title}</h5>
@@ -262,8 +318,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ assignments }) => {
       ) : (
         <WeekTimeGrid
           weekDays={weekDays}
-          assignments={assignments}
+          assignments={displayedAssignments}
           scrollRef={weekScrollRef}
+        />
+      )}
+
+      {isAddTaskOpen && (
+        <AddTaskModal
+          courses={courses}
+          defaultDate={format(selectedDay || new Date(), 'yyyy-MM-dd')}
+          onClose={() => setIsAddTaskOpen(false)}
+          onAdd={onAddTask}
         />
       )}
     </div>

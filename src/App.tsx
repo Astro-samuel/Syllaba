@@ -17,6 +17,7 @@ import { CalendarView } from './components/CalendarView';
 import { GradeCalculator } from './components/GradeCalculator';
 import { CalendarSyncModal } from './components/CalendarSyncModal';
 import { CourseDetailModal } from './components/CourseDetailModal';
+import { parseClassSchedule } from './utils/aiParser';
 import { exchangeCodeForTokens } from './utils/googleAuth';
 import { saveGoogleCalendarAuth, getGoogleCalendarAuth } from './utils/storage';
 import { fetchGoogleAccountProfile, saveGoogleUser } from './utils/googleCalendarLive';
@@ -120,7 +121,8 @@ export const App: React.FC = () => {
       instructor: instructor,
       semester: semester,
       createdAt: new Date().toISOString(),
-      policies
+      policies,
+      classSchedule: parseClassSchedule(policies.classMeetings)
     };
 
     const newAssignments: Assignment[] = extractedItems.map((item, idx) => ({
@@ -204,8 +206,18 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateCoursePolicies = (courseId: string, policies: CoursePolicies) => {
-    const updated = courses.map((c) => (c.id === courseId ? { ...c, policies } : c));
+    // Re-derive the recurring meeting pattern whenever classMeetings text is
+    // edited, so a manual correction ("Tuesday and Thursday, 2:00 - 3:30 PM")
+    // is reflected in the calendar's recurring chips, not just the text box.
+    const updated = courses.map((c) =>
+      c.id === courseId ? { ...c, policies, classSchedule: parseClassSchedule(policies.classMeetings) } : c
+    );
     updateCourses(updated);
+  };
+
+  const handleAddManualAssignment = (assignment: Omit<Assignment, 'id'>) => {
+    const newAssignment: Assignment = { ...assignment, id: `a_manual_${Date.now()}` };
+    updateAssignments([...assignments, newAssignment]);
   };
 
   return (
@@ -238,7 +250,7 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'calendar' && (
-            <CalendarView assignments={assignments} />
+            <CalendarView assignments={assignments} courses={courses} onAddTask={handleAddManualAssignment} />
           )}
 
           {activeTab === 'upload' && (

@@ -1,9 +1,56 @@
-import { ExtractionResult, ExtractedAssignment, AssignmentType, PresetSyllabus, CoursePolicies } from '../types';
+import { ExtractionResult, ExtractedAssignment, AssignmentType, PresetSyllabus, CoursePolicies, ClassSchedule } from '../types';
 import { addDays, format } from 'date-fns';
 
 // Generate dynamic fresh dates relative to current day
 const today = new Date();
 const formatDate = (daysFromNow: number) => format(addDays(today, daysFromNow), 'yyyy-MM-dd');
+
+const DAY_NAME_TO_INDEX: { [key: string]: number } = {
+  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6
+};
+
+/**
+ * Pulls a recurring weekly meeting pattern out of a course's classMeetings
+ * policy text — e.g. "Class meetings\nSection Days and time Room\n101
+ * Tuesday and Thursday, 2:00 – 3:30 PM ASC-140" — for rendering recurring
+ * class-time chips on the calendar. When a syllabus lists times per section
+ * (101/102/...), the first section's time is used; a student is only
+ * enrolled in one, and the days are almost always identical across
+ * sections anyway. Returns null rather than a guess when no day name or no
+ * time range is found.
+ */
+export function parseClassSchedule(classMeetingsText: string | null | undefined): ClassSchedule | null {
+  if (!classMeetingsText) return null;
+
+  const dayMatches = classMeetingsText.match(/\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/gi);
+  if (!dayMatches) return null;
+  const days = Array.from(new Set(dayMatches.map((d) => DAY_NAME_TO_INDEX[d.toLowerCase().substring(0, 3)]))).sort(
+    (a, b) => a - b
+  );
+  if (days.length === 0) return null;
+
+  let startTime: string | null = null;
+  let endTime: string | null = null;
+  const rangeMatch = classMeetingsText.match(/(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (rangeMatch) {
+    const meridiem = rangeMatch[5].toLowerCase();
+    const to24Hour = (hh: string, mm: string) => {
+      let h = parseInt(hh, 10);
+      if (meridiem === 'pm' && h < 12) h += 12;
+      if (meridiem === 'am' && h === 12) h = 0;
+      return `${h.toString().padStart(2, '0')}:${mm}`;
+    };
+    startTime = to24Hour(rangeMatch[1], rangeMatch[2]);
+    endTime = to24Hour(rangeMatch[3], rangeMatch[4]);
+  }
+
+  // A trailing room/building code sharing the line with the time, e.g.
+  // "ASC-140" — letters followed by digits, distinguishes it from a bare
+  // section number ("101") which has no leading letters.
+  const locationMatch = classMeetingsText.match(/\b([A-Z]{2,6}[-\s]?\d{2,4}[A-Z]?)\b/);
+
+  return { days, startTime, endTime, location: locationMatch ? locationMatch[1] : null };
+}
 
 export const PRESET_SYLLABI: PresetSyllabus[] = [
   {

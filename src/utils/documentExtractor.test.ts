@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSyllabusText } from './aiParser';
+import { parseSyllabusText, parseClassSchedule } from './aiParser';
 
 // Regression test for the bug where a real multi-line PDF syllabus (tables,
 // wrapped headings, a schedule with one item per line) produced garbage or
@@ -150,5 +150,22 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     const midterm = result.assignments.find((a) => a.title.toLowerCase().includes('midterm'));
 
     expect(midterm?.weightPercent).toBe(35);
+  });
+
+  it('parses a recurring weekly meeting pattern out of classMeetings text', async () => {
+    const result = await parseSyllabusText(apsc179Text);
+    const schedule = parseClassSchedule(result.policies?.classMeetings);
+
+    // "Tuesday and Thursday, 2:00 – 3:30 PM   ASC-140" -> Tue=2, Thu=4
+    expect(schedule?.days).toEqual([2, 4]);
+    expect(schedule?.startTime).toBe('14:00');
+    expect(schedule?.endTime).toBe('15:30');
+    expect(schedule?.location).toBe('ASC-140');
+  });
+
+  it('returns null for a class schedule when there is no classMeetings text', () => {
+    expect(parseClassSchedule(null)).toBeNull();
+    expect(parseClassSchedule(undefined)).toBeNull();
+    expect(parseClassSchedule('No days or times mentioned here.')).toBeNull();
   });
 });
