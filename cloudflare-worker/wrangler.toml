@@ -1,0 +1,10 @@
+name = "syllaba-cloud"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# Created by `npm run kv:create` (or `wrangler kv namespace create SYLLABA_KV`) --
+# paste the printed id in below. One namespace holds every installation's
+# data, each under its own random key, so no per-user provisioning needed.
+[[kv_namespaces]]
+binding = "SYLLABA_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"

@@ -1,0 +1,21 @@
+{
+  "name": "syllaba-cloud-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker hosting Syllaba's course/assignment data (KV) and a remote MCP endpoint over it, for claude.ai with no tunnel required.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "kv:create": "wrangler kv namespace create SYLLABA_KV"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260101.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.4.0"
+  }
+}
