@@ -317,12 +317,22 @@ function parseWithLocalNLP(text: string): ExtractionResult {
   if (breakdownMatch) {
     const bLines = breakdownMatch[0].split('\n');
     for (const bLine of bLines) {
-      const itemMatch = bLine.match(/([A-Za-z0-9\s]+)(?:\((\d+)\s*total\))?:\s*(\d+)%/i);
+      // "Label: NN%" (prose-style breakdown) or "Label   NN%   ..." (a
+      // rendered table row, column-separated by whitespace with no colon —
+      // pdf.js table extraction never inserts one).
+      const itemMatch =
+        bLine.match(/([A-Za-z0-9\s]+?)(?:\((\d+)\s*total\))?:\s*(\d+(?:\.\d+)?)%/i) ||
+        bLine.match(/^([A-Za-z][A-Za-z0-9\s()]*?)(?:\((\d+)\s*total\))?\s{2,}(\d+(?:\.\d+)?)%/i);
       if (itemMatch) {
-        const key = itemMatch[1].trim().toLowerCase();
+        // Strip any other parenthetical annotation ("(1 hour)", "(marked on
+        // attempt)") so the key matches the plain category names looked up
+        // below instead of staying keyed to prose that varies per syllabus.
+        const key = itemMatch[1].replace(/\([^)]*\)/g, '').trim().toLowerCase();
         const count = itemMatch[2] ? parseInt(itemMatch[2], 10) : 1;
         const totalPct = parseFloat(itemMatch[3]);
-        weightsDict[key] = count > 1 ? parseFloat((totalPct / count).toFixed(1)) : totalPct;
+        if (key) {
+          weightsDict[key] = count > 1 ? parseFloat((totalPct / count).toFixed(1)) : totalPct;
+        }
       }
     }
   }
@@ -462,6 +472,16 @@ function parseWithLocalNLP(text: string): ExtractionResult {
         weightPercent = weightsDict['final project'];
       } else if (/final exam/i.test(lowerLine) && weightsDict['final exam']) {
         weightPercent = weightsDict['final exam'];
+      } else {
+        // Generic fallback for grading tables that don't match one of the
+        // hardcoded category names above (e.g. a syllabus with a single
+        // undifferentiated "Midterm exam" or "Final exam" category rather
+        // than "Midterm exam 1"/"2"): match by substring against whatever
+        // categories were actually found in the grading table.
+        const matchedKey = Object.keys(weightsDict).find((key) => key.length > 3 && lowerLine.includes(key));
+        if (matchedKey) {
+          weightPercent = weightsDict[matchedKey];
+        }
       }
     }
 
@@ -470,10 +490,15 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       .replace(/\bdue[:\s]*/i, '')
       .replace(/\bdate[:\s]*/i, '')
       .replace(/(\d{1,2}\s*%)/g, '')
-      // Strip a trailing "— due HH:MM AM/PM ..." or "— HH:MM–HH:MM AM/PM, Room ..."
-      // annotation now that its time/location has been captured into structured
-      // fields — keeps the title readable instead of repeating the raw clause.
-      .replace(/\s*[–—-]\s*(?:due\s*|report due\s*)?\d{1,2}:\d{2}(?:\s*[–—-]\s*\d{1,2}:\d{2})?\s*(?:AM|PM).*$/i, '')
+      // Strip a trailing "— due HH:MM AM/PM ..." / "— HH:MM–HH:MM AM/PM, Room ..."
+      // / ", HH:MM – HH:MM AM/PM, Room ..." annotation now that its time and
+      // location have been captured into structured fields. The leading
+      // separator accepts a comma as well as a dash (not just "— HH:MM") —
+      // a comma-joined line like "Thursday, November 5, 2:00 – 3:30 PM, Room"
+      // has its OWN internal dash inside the time range, so requiring a dash
+      // immediately before the first time value would match that inner dash
+      // instead and truncate the title mid-time.
+      .replace(/[\s,–—-]*(?:due\s*|report due\s*)?\d{1,2}:\d{2}(?:\s*[–—-]\s*\d{1,2}:\d{2})?\s*(?:AM|PM).*$/i, '')
       .trim();
 
     if (title.length > 75) {

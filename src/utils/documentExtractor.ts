@@ -1,9 +1,15 @@
 import * as pdfjsLib from 'pdfjs-dist';
+// Vite bundles the worker file itself and gives us a same-origin URL to it —
+// no network dependency, no version drift against a CDN mirror.
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 
-// Set pdfjs worker source
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Set pdfjs worker source. Previously this pointed at
+// `https://cdnjs.cloudflare.com/.../pdf.worker.min.js` — pdfjs-dist 6.x only
+// ships a `.mjs` worker, so that URL 404s and every PDF upload fails before
+// any text extraction runs.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 /**
  * Extracts raw text from uploaded syllabus & schedule files (.pdf, .docx, .xlsx, .xls, .txt, .md, .csv)

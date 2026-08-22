@@ -27,10 +27,10 @@ Midterm exam – Section 101 Thursday, November 5, 2:00 – 3:30 PM, ASC-140
 Last class Tuesday, December 8, 2026
 
 Assessment and grading
-Component Weight When
-Assignments (marked on attempt) 5% Throughout the term
-Midterm exam (1 hour) 35% Thursday, November 5, in class
-Final exam (3 hours) 60% December examination period
+Component   Weight   When
+Assignments (marked on attempt)   5%   Throughout the term
+Midterm exam (1 hour)   35%   Thursday, November 5, in class
+Final exam (3 hours)   60%   December examination period
 
 Late work and oops tokens
 Late submissions are not accepted; Canvas flags anything late, even by one minute.
@@ -74,5 +74,26 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
 
     expect(result.policies?.lateWork).toBeNull();
     expect(result.policies?.aiPolicy).toBeNull();
+  });
+
+  it('does not truncate a title mid-time when the time range is comma-joined, not dash-joined', async () => {
+    // "Thursday, November 5, 2:00 – 3:30 PM, ASC-140" — the only dash in the
+    // line sits *inside* the time range, not before it. A title-stripper
+    // that requires a dash immediately before the first time value matches
+    // that inner dash instead and truncates the title mid-number.
+    const result = await parseSyllabusText(apsc179Text);
+    const midterm = result.assignments.find((a) => a.title.toLowerCase().includes('midterm'));
+
+    expect(midterm?.title).not.toMatch(/2:00$/);
+    expect(midterm?.title).toBe('Midterm exam – Section 101 Thursday, November 5');
+  });
+
+  it('attaches the grading-table weight to an item even when the table has no colon separator', async () => {
+    // "Midterm exam (1 hour)   35%   Thursday, November 5, in class" is a
+    // rendered table row (whitespace-separated columns), not "Label: NN%".
+    const result = await parseSyllabusText(apsc179Text);
+    const midterm = result.assignments.find((a) => a.title.toLowerCase().includes('midterm'));
+
+    expect(midterm?.weightPercent).toBe(35);
   });
 });
