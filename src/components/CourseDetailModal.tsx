@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { Course, Assignment, CoursePolicies } from '../types';
 import { X, CheckCircle2, Circle, Save } from 'lucide-react';
 
+// Key dates and the grading breakdown are deliberately NOT shown here —
+// see the matching comment in ReviewModal.tsx. They already drive the
+// Assignments tab (dated rows) and its Weight % column.
 const POLICY_FIELDS: { key: keyof CoursePolicies; label: string; placeholder: string }[] = [
-  { key: 'keyDates', label: 'Key Dates', placeholder: 'No key dates recorded for this course.' },
   { key: 'classMeetings', label: 'Class Meetings', placeholder: 'No class meeting times/location recorded.' },
   { key: 'topics', label: 'Topics / Schedule', placeholder: 'No topics or weekly schedule recorded.' },
-  { key: 'gradingBreakdown', label: 'Grading Breakdown', placeholder: 'No grading breakdown recorded for this course.' },
   { key: 'lateWork', label: 'Late Work / Attendance', placeholder: 'No late-work or attendance policy recorded.' },
   { key: 'contacts', label: 'Contacts & Logistics', placeholder: 'No office hours, contacts, or logistics recorded.' },
   { key: 'aiPolicy', label: 'AI / Academic Integrity', placeholder: 'No AI or academic integrity policy recorded.' }

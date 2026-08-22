@@ -328,9 +328,22 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     courseCode = codeMatch[1].toUpperCase();
   }
 
-  const titleLine = lines.slice(0, 8).find(
-    (l) => /^[A-Z0-9\s:–-]{5,65}$/i.test(l) && !/^instructor|^professor|^prof\.|^meeting|^lab:|^credit/i.test(l)
-  );
+  const titleShapeCheck = (l: string) =>
+    /^[A-Z0-9\s:–-]{5,65}$/i.test(l) &&
+    !/^instructor|^professor|^prof\.|^meeting|^lab:|^credit/i.test(l) &&
+    // Excludes institutional banner text ("THE UNIVERSITY OF BRITISH
+    // COLUMBIA") that some PDFs render as real extractable text rather than
+    // a logo image — it has the same all-caps shape as a real title line
+    // and, sitting above it, would otherwise win as the "first" match.
+    !/^the\s|university|college\b|school of/i.test(l);
+
+  // Prefer a title-shaped line that actually contains the course code we
+  // already matched reliably above — far less likely to grab an unrelated
+  // banner line than "first line that merely looks like a title."
+  const titleLine =
+    (codeMatch &&
+      lines.slice(0, 8).find((l) => titleShapeCheck(l) && l.toUpperCase().includes(codeMatch[1].toUpperCase()))) ||
+    lines.slice(0, 8).find(titleShapeCheck);
   if (titleLine) {
     courseName = titleLine.replace(/^course[:\s]*/i, '').trim();
     if (courseName.includes(':')) {
@@ -651,6 +664,42 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       dueTime: itemTime,
       type,
       weightPercent
+    });
+  }
+
+  // 5. Representative rows for recurring class meetings and office hours,
+  // so the parsed day/time can be visually verified on the review table
+  // before being relied on — the same parsed pattern also drives the
+  // calendar's recurring chips once the course is saved. Anchored to the
+  // term's first-class date when known, since neither is a one-off item
+  // with a real date of its own.
+  const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const firstClassDate = assignments.find((a) => /first class/i.test(a.title))?.dueDate || '';
+
+  const classSchedule = parseClassSchedule(policies.classMeetings);
+  if (classSchedule) {
+    assignments.push({
+      title: `Class Meeting (${classSchedule.days.map((d) => DAY_ABBR[d]).join(', ')})${classSchedule.location ? ` — ${classSchedule.location}` : ''}`,
+      dueDate: firstClassDate,
+      dueTime: classSchedule.startTime,
+      type: 'other',
+      weightPercent: null
+    });
+  }
+
+  // Scoped to just the office-hours/drop-in-hours line within the contacts
+  // block, not the whole thing — that block also mentions the textbook,
+  // calculator policy, etc., and scanning all of it for weekday names risks
+  // picking up an unrelated day mentioned in passing.
+  const officeHoursLine = policies.contacts?.split('\n').find((l) => /office hours|drop-in/i.test(l)) || null;
+  const officeHoursSchedule = parseClassSchedule(officeHoursLine);
+  if (officeHoursSchedule) {
+    assignments.push({
+      title: `Office Hours (${officeHoursSchedule.days.map((d) => DAY_ABBR[d]).join(', ')})${officeHoursSchedule.location ? ` — ${officeHoursSchedule.location}` : ''}`,
+      dueDate: firstClassDate,
+      dueTime: officeHoursSchedule.startTime,
+      type: 'other',
+      weightPercent: null
     });
   }
 

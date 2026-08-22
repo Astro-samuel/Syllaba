@@ -12,11 +12,16 @@ const EMPTY_POLICIES: CoursePolicies = {
   topics: null
 };
 
+// Key dates and the grading breakdown are deliberately NOT shown here even
+// though they're still extracted (into policies.keyDates/gradingBreakdown) —
+// that data already drives the schedule table above (dated rows, and the
+// Weight % column via weightsDict), so repeating it as a raw text block
+// here would just duplicate what's already correctly represented above it.
+// This panel is only for what the schedule table can't show: recurring
+// meeting time/location, the topic/week breakdown, and prose policies.
 const POLICY_FIELDS: { key: keyof CoursePolicies; label: string; placeholder: string }[] = [
-  { key: 'keyDates', label: 'Key Dates', placeholder: 'No key dates found — first/last class, exam dates, etc.' },
   { key: 'classMeetings', label: 'Class Meetings', placeholder: 'No class meeting times/location found.' },
   { key: 'topics', label: 'Topics / Schedule', placeholder: 'No topics or weekly schedule found.' },
-  { key: 'gradingBreakdown', label: 'Grading Breakdown', placeholder: 'No grading breakdown found — paste or type it here.' },
   { key: 'lateWork', label: 'Late Work / Attendance', placeholder: 'No late-work or attendance policy found.' },
   { key: 'contacts', label: 'Contacts & Logistics', placeholder: 'No office hours, contacts, or logistics found.' },
   { key: 'aiPolicy', label: 'AI / Academic Integrity', placeholder: 'No AI or academic integrity policy found.' }

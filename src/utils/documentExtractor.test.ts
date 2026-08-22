@@ -169,3 +169,90 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(parseClassSchedule('No days or times mentioned here.')).toBeNull();
   });
 });
+
+// A second, differently-worded syllabus (APSC 999, a fictional test doc) to
+// prove the extraction generalizes rather than being tuned to one PDF's
+// specific wording. This one also renders its institutional banner
+// ("THE UNIVERSITY OF BRITISH COLUMBIA") as real extractable text sitting
+// above the actual title line -- APSC 179's banner was a logo image, not
+// text, so this case hadn't been exercised yet.
+describe('parseSyllabusText against a second, differently-worded syllabus', () => {
+  const apsc999Text = `THE UNIVERSITY OF BRITISH COLUMBIA
+APSC 999 – Introduction to Widget Engineering
+Sections 101 and 102 · Winter 2026, Term 1 · 3 credits
+School of Engineering, UBC Okanagan
+
+Quick facts
+Instructor Dr. Priya Fenwick, Ph.D., P.Eng.
+Email priya.fenwick@ubc.ca
+
+Class meetings
+Section   Days and time   Room
+101   Monday and Wednesday, 1:00 – 2:30 PM   EME-1101
+102   Monday and Wednesday, 3:00 – 4:30 PM   EME-1101
+
+Key dates
+First class Monday, September 7, 2026
+Midterm exam – Section 101 Wednesday, October 28, 1:00 – 2:30 PM, EME-1101
+Midterm exam – Section 102 Wednesday, October 28, 3:00 – 4:30 PM, EME-1101
+Last class Wednesday, December 2, 2026
+Final exam Scheduled by the University and announced during the term.
+
+Assessment and grading
+Component   Weight   When
+Assignments (marked on attempt)   10%   Throughout the term
+Midterm exam (1 hour)   30%   Wednesday, October 28, in class
+Final exam (3 hours)   60%   December examination period
+
+Topics
+Week   Topic
+1–3   Fasteners: threads, bolts, washers, torque specs
+
+Late work and oops tokens
+Late submissions are not accepted; Canvas flags anything late, even by one minute.
+
+Getting help
+Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
+
+  it('picks the real title, not the institutional banner line above it', async () => {
+    const result = await parseSyllabusText(apsc999Text);
+
+    expect(result.courseCode).toBe('APSC 999');
+    expect(result.courseName).toBe('APSC 999 – Introduction to Widget Engineering');
+  });
+
+  it('produces the same clean schedule shape on a differently-worded syllabus, including recurring meeting/office-hours rows', async () => {
+    const result = await parseSyllabusText(apsc999Text);
+    const titles = result.assignments.map((a) => a.title);
+
+    expect(titles).toEqual([
+      'First class',
+      'Midterm exam',
+      'Last class',
+      'Final exam',
+      'Class Meeting (Mon, Wed) — EME-1101',
+      'Office Hours (Wed) — EME 3311'
+    ]);
+    const midterm = result.assignments.find((a) => a.title === 'Midterm exam');
+    const finalExam = result.assignments.find((a) => a.title === 'Final exam');
+    expect(midterm?.weightPercent).toBe(30);
+    expect(finalExam?.weightPercent).toBe(60);
+    expect(finalExam?.dueDate).toBe('');
+
+    // Neither recurring pattern is a graded item, and the review table
+    // needs to allow (not fabricate) an empty weight for both.
+    const classMeeting = result.assignments.find((a) => a.title.startsWith('Class Meeting'));
+    const officeHours = result.assignments.find((a) => a.title.startsWith('Office Hours'));
+    expect(classMeeting?.weightPercent).toBeNull();
+    expect(officeHours?.weightPercent).toBeNull();
+    // Anchored to the term's first-class date so they show up on the
+    // calendar/table instead of floating with no date.
+    expect(classMeeting?.dueDate).toBe('2026-09-07');
+    expect(officeHours?.dueDate).toBe('2026-09-07');
+  });
+
+  it('leaves aiPolicy null when the syllabus genuinely has no AI/academic-integrity section', async () => {
+    const result = await parseSyllabusText(apsc999Text);
+    expect(result.policies?.aiPolicy).toBeNull();
+  });
+});
