@@ -1,0 +1,23 @@
+{
+  "name": "syllaba-mcp-server",
+  "version": "1.0.0",
+  "description": "Read-only MCP server exposing a Syllaba desktop user's courses, assignments, and policies to Claude Desktop / Claude Code / Gemini CLI.",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "syllaba-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "typescript": "^5.7.3"
+  }
+}

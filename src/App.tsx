@@ -17,6 +17,7 @@ import { CalendarView } from './components/CalendarView';
 import { GradeCalculator } from './components/GradeCalculator';
 import { CalendarSyncModal } from './components/CalendarSyncModal';
 import { CourseDetailModal } from './components/CourseDetailModal';
+import { syncToDiskForMcp } from './utils/electronSync';
 import { exchangeCodeForTokens } from './utils/googleAuth';
 import { saveGoogleCalendarAuth, getGoogleCalendarAuth } from './utils/storage';
 import { fetchGoogleAccountProfile, saveGoogleUser } from './utils/googleCalendarLive';
@@ -51,6 +52,10 @@ export const App: React.FC = () => {
 
     getStoredAssignments().then((loadedAssignments) => {
       setAssignments(loadedAssignments);
+      // Populate ~/.syllaba/data.json on startup too, not just after an
+      // edit — otherwise the MCP server has nothing to read until the
+      // student changes something.
+      syncToDiskForMcp(loadedCourses, loadedAssignments);
     });
 
     const loadedStreak = getStoredStreak();
@@ -86,15 +91,19 @@ export const App: React.FC = () => {
   const updateCourses = (newCourses: Course[]) => {
     setCourses(newCourses);
     saveCourses(newCourses);
+    syncToDiskForMcp(newCourses, assignments);
   };
 
   const refreshCoursesFromStorage = () => {
-    setCourses(getStoredCourses());
+    const loaded = getStoredCourses();
+    setCourses(loaded);
+    syncToDiskForMcp(loaded, assignments);
   };
 
   const updateAssignments = (newAssignments: Assignment[]) => {
     setAssignments(newAssignments);
     saveAssignments(newAssignments);
+    syncToDiskForMcp(courses, newAssignments);
   };
 
   const handleExtractionComplete = (result: ExtractionResult, color: string) => {
