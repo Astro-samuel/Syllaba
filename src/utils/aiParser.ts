@@ -234,9 +234,17 @@ function parseWithLocalNLP(text: string): ExtractionResult {
   }
 
   // 2. Instructor & Semester (Stop at newline, meeting times, lab, office hours)
-  const instructorMatch = text.match(/(?:instructor|professor|prof\.|dr\.)\s*([A-Z][A-Za-z0-9\.\s-]+?)(?=\r|\n|meeting|lab:|office|email|phone|$)/i);
+  // Capture group allows any non-newline character (not just a narrow
+  // [A-Za-z0-9.\s-] set) so titles/degrees with commas, ampersands, or
+  // colons after the label ("Instructor Jane Doe, Ph.D., P.Eng.") don't
+  // silently fail the match and fall back to the literal "Instructor"
+  // placeholder.
+  const instructorMatch = text.match(/(?:instructor|professor|prof\.|dr\.)[\s:]*([A-Z][^\r\n]+?)(?=\r|\n|meeting|lab:|office|email|phone|$)/i);
   if (instructorMatch && instructorMatch[1].trim().length > 1) {
-    instructor = instructorMatch[0].trim();
+    // match[0] keeps a real title ("Dr. A. Reyes") but starts with the bare
+    // "Instructor"/"Professor" label when there's no title in the name
+    // itself ("Instructor Mehran Shirazi") — strip only that leading label.
+    instructor = instructorMatch[0].replace(/^(?:instructor|professor)[\s:]*/i, '').trim();
   }
 
   const semesterMatch = text.match(/\b(fall|spring|summer|winter)\s*202[5-9]\b/i);

@@ -46,10 +46,19 @@ async function extractTextFromPdf(file: File): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const pageString = textContent.items
-      .map((item: any) => item.str)
-      .join(' ');
-    pageTexts.push(pageString);
+    // PDF.js reports text as a flat run of items with no inherent line
+    // breaks. Each item flags hasEOL when it's the last item on its visual
+    // line, so we rebuild real line breaks from that instead of joining
+    // everything into one giant space-separated blob — without this, every
+    // downstream parser that works line-by-line (headers, tables, the
+    // assignment schedule) sees an entire page as a single unparseable line.
+    let pageString = '';
+    for (const item of textContent.items as any[]) {
+      if (typeof item.str !== 'string') continue;
+      pageString += item.str;
+      pageString += item.hasEOL ? '\n' : ' ';
+    }
+    pageTexts.push(pageString.trim());
   }
 
   return pageTexts.join('\n\n');
