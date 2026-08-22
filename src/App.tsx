@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Course, Assignment, TabType, StreakState, ExtractionResult, ExtractedAssignment } from './types';
+import { Course, Assignment, TabType, StreakState, ExtractionResult, ExtractedAssignment, CoursePolicies } from './types';
 import {
   getStoredCourses,
   saveCourses,
@@ -16,6 +16,7 @@ import { DashboardTimeline } from './components/DashboardTimeline';
 import { CalendarView } from './components/CalendarView';
 import { GradeCalculator } from './components/GradeCalculator';
 import { CalendarSyncModal } from './components/CalendarSyncModal';
+import { CourseDetailModal } from './components/CourseDetailModal';
 import { exchangeCodeForTokens } from './utils/googleAuth';
 import { saveGoogleCalendarAuth, getGoogleCalendarAuth } from './utils/storage';
 import { fetchGoogleAccountProfile, saveGoogleUser } from './utils/googleCalendarLive';
@@ -32,6 +33,7 @@ export const App: React.FC = () => {
   });
   const [activeTab, setActiveTab] = useState<TabType>('timeline');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
 
   // Extraction Review Modal state
   const [activeExtraction, setActiveExtraction] = useState<ExtractionResult | null>(null);
@@ -106,7 +108,8 @@ export const App: React.FC = () => {
     color: string,
     instructor: string,
     semester: string,
-    extractedItems: ExtractedAssignment[]
+    extractedItems: ExtractedAssignment[],
+    policies: CoursePolicies
   ) => {
     const courseId = `c_${Date.now()}`;
     const newCourse: Course = {
@@ -116,7 +119,8 @@ export const App: React.FC = () => {
       color: color,
       instructor: instructor,
       semester: semester,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      policies
     };
 
     const newAssignments: Assignment[] = extractedItems.map((item, idx) => ({
@@ -199,6 +203,11 @@ export const App: React.FC = () => {
     updateAssignments(updated);
   };
 
+  const handleUpdateCoursePolicies = (courseId: string, policies: CoursePolicies) => {
+    const updated = courses.map((c) => (c.id === courseId ? { ...c, policies } : c));
+    updateCourses(updated);
+  };
+
   return (
     <div className="min-h-screen flex bg-caplen-bg">
       {/* Caplen Left Sidebar Navigation */}
@@ -223,6 +232,7 @@ export const App: React.FC = () => {
               onNavigateToUpload={() => setActiveTab('upload')}
               onNavigateToCalendar={() => setActiveTab('calendar')}
               onDeleteCourse={handleDeleteCourse}
+              onOpenCourse={(courseId) => setSelectedCourseId(courseId)}
               searchQuery={searchQuery}
             />
           )}
@@ -253,6 +263,21 @@ export const App: React.FC = () => {
           color={extractionColor}
           onClose={() => setActiveExtraction(null)}
           onSave={handleSaveExtractedCourse}
+        />
+      )}
+
+      {selectedCourseId && (
+        <CourseDetailModal
+          course={courses.find((c) => c.id === selectedCourseId)!}
+          assignments={assignments.filter(
+            (a) =>
+              a.courseId === selectedCourseId ||
+              a.courseName === courses.find((c) => c.id === selectedCourseId)?.name ||
+              a.courseName === courses.find((c) => c.id === selectedCourseId)?.code
+          )}
+          onClose={() => setSelectedCourseId(null)}
+          onToggleComplete={handleToggleComplete}
+          onSavePolicies={(policies: CoursePolicies) => handleUpdateCoursePolicies(selectedCourseId, policies)}
         />
       )}
 

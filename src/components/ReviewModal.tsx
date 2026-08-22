@@ -1,6 +1,20 @@
 import React, { useState } from 'react';
-import { ExtractionResult, ExtractedAssignment, AssignmentType } from '../types';
-import { X, Plus, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ExtractionResult, ExtractedAssignment, AssignmentType, CoursePolicies } from '../types';
+import { X, Plus, Trash2, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+
+const EMPTY_POLICIES: CoursePolicies = {
+  gradingBreakdown: null,
+  lateWork: null,
+  contacts: null,
+  aiPolicy: null
+};
+
+const POLICY_FIELDS: { key: keyof CoursePolicies; label: string; placeholder: string }[] = [
+  { key: 'gradingBreakdown', label: 'Grading Breakdown', placeholder: 'No grading breakdown found — paste or type it here.' },
+  { key: 'lateWork', label: 'Late Work / Attendance', placeholder: 'No late-work or attendance policy found.' },
+  { key: 'contacts', label: 'Contacts & Logistics', placeholder: 'No office hours, contacts, or logistics found.' },
+  { key: 'aiPolicy', label: 'AI / Academic Integrity', placeholder: 'No AI or academic integrity policy found.' }
+];
 
 interface ReviewModalProps {
   extraction: ExtractionResult;
@@ -12,7 +26,8 @@ interface ReviewModalProps {
     color: string,
     instructor: string,
     semester: string,
-    assignments: ExtractedAssignment[]
+    assignments: ExtractedAssignment[],
+    policies: CoursePolicies
   ) => void;
 }
 
@@ -28,6 +43,12 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const [semester, setSemester] = useState(extraction.semester || 'Fall 2026');
   const [color, setColor] = useState(initialColor);
   const [items, setItems] = useState<ExtractedAssignment[]>([...extraction.assignments]);
+  const [policies, setPolicies] = useState<CoursePolicies>({ ...EMPTY_POLICIES, ...extraction.policies });
+  const [policiesExpanded, setPoliciesExpanded] = useState(false);
+
+  const handleUpdatePolicy = (key: keyof CoursePolicies, value: string) => {
+    setPolicies((prev) => ({ ...prev, [key]: value }));
+  };
 
   const handleUpdateItem = (index: number, field: keyof ExtractedAssignment, value: any) => {
     const updated = [...items];
@@ -52,7 +73,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
   const handleConfirmSave = () => {
     if (!courseName.trim()) return;
-    onSave(courseName, courseCode, color, instructor, semester, items);
+    onSave(courseName, courseCode, color, instructor, semester, items, policies);
   };
 
   const totalWeight = items.reduce((acc, curr) => acc + (curr.weightPercent || 0), 0);
@@ -224,6 +245,38 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Policies */}
+        <div className="rounded-2xl border border-slate-200 bg-white mb-6 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setPoliciesExpanded((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+          >
+            <span className="font-heading text-sm font-extrabold text-caplen-navy">Course Policies</span>
+            {policiesExpanded ? (
+              <ChevronUp className="h-4 w-4 text-slate-400" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-slate-400" />
+            )}
+          </button>
+          {policiesExpanded && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-4 pb-4">
+              {POLICY_FIELDS.map(({ key, label, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-heading">{label}</label>
+                  <textarea
+                    value={policies[key] || ''}
+                    placeholder={placeholder}
+                    onChange={(e) => handleUpdatePolicy(key, e.target.value)}
+                    rows={4}
+                    className="mt-1 w-full rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-medium text-caplen-navy focus:outline-none resize-y"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

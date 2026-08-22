@@ -30,7 +30,21 @@ Assessment and grading
 Component Weight When
 Assignments (marked on attempt) 5% Throughout the term
 Midterm exam (1 hour) 35% Thursday, November 5, in class
-Final exam (3 hours) 60% December examination period`;
+Final exam (3 hours) 60% December examination period
+
+Late work and oops tokens
+Late submissions are not accepted; Canvas flags anything late, even by one minute.
+However, you have two oops tokens for the term.
+
+Drop-in (Office) hours
+Fridays, 1:00 - 5:00 PM, EME 3219. You do not need an appointment.
+
+Generative AI
+You may use artificial intelligence tools, including generative AI, to gather information.
+AI tools are not permitted during the midterm or the final exam.
+
+Academic integrity
+The academic enterprise is founded on honesty, civility, and integrity.`;
 
   it('extracts course code and instructor instead of collapsing the page into one blob', async () => {
     const result = await parseSyllabusText(apsc179Text);
@@ -44,5 +58,21 @@ Final exam (3 hours) 60% December examination period`;
 
     expect(Array.isArray(result.assignments)).toBe(true);
     expect(result.assignments.length).toBeGreaterThan(0);
+  });
+
+  it('extracts all four policy categories from their respective sections', async () => {
+    const result = await parseSyllabusText(apsc179Text);
+
+    expect(result.policies?.gradingBreakdown).toContain('35%');
+    expect(result.policies?.lateWork?.toLowerCase()).toContain('oops token');
+    expect(result.policies?.contacts?.toLowerCase()).toContain('drop-in');
+    expect(result.policies?.aiPolicy?.toLowerCase()).toContain('generative ai');
+  });
+
+  it('leaves a policy category null rather than fabricating text when the syllabus has no such section', async () => {
+    const result = await parseSyllabusText('COURSE 101\nInstructor Jane Doe\nNo other sections here.');
+
+    expect(result.policies?.lateWork).toBeNull();
+    expect(result.policies?.aiPolicy).toBeNull();
   });
 });

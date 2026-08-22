@@ -24,6 +24,17 @@ export interface Course {
   semester?: string;
   syllabusText?: string;
   createdAt: string;
+  policies?: CoursePolicies;
+}
+
+// Free-text policy blocks pulled from a syllabus. Each field is null (not an
+// empty string) when the syllabus had no matching section, so the UI can
+// tell "nothing found" apart from "found and it's blank".
+export interface CoursePolicies {
+  gradingBreakdown: string | null;
+  lateWork: string | null;
+  contacts: string | null;
+  aiPolicy: string | null;
 }
 
 export interface ExtractedAssignment {
@@ -40,6 +51,7 @@ export interface ExtractionResult {
   instructor: string;
   semester: string;
   assignments: ExtractedAssignment[];
+  policies?: CoursePolicies;
 }
 
 export interface StreakState {

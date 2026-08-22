@@ -1,4 +1,4 @@
-import { ExtractionResult, ExtractedAssignment, AssignmentType, PresetSyllabus } from '../types';
+import { ExtractionResult, ExtractedAssignment, AssignmentType, PresetSyllabus, CoursePolicies } from '../types';
 import { addDays, format } from 'date-fns';
 
 // Generate dynamic fresh dates relative to current day
@@ -204,6 +204,65 @@ export async function parseSyllabusText(
   return parseWithLocalNLP(rawText);
 }
 
+// Headings that mark the start of one of the four policy categories we pull
+// out of a syllabus, plus other common syllabus headings that only matter as
+// stop boundaries (so e.g. a grading-breakdown block doesn't run on and
+// swallow the late-policy section right after it).
+const POLICY_SECTION_STARTS: Record<keyof CoursePolicies, RegExp> = {
+  gradingBreakdown: /(?:grading breakdown|assessment and grading|evaluation\s*&?\s*grading|grading scheme|course grades)/i,
+  lateWork: /(?:late (?:policy|work|submissions?)|oops tokens?|attendance(?: policy)?|makeup policy)/i,
+  contacts: /(?:office hours|drop-in(?:\s*\(office\))? hours|markers?\b|getting help|contact(?:s|\sinformation)?)/i,
+  aiPolicy: /(?:generative ai|artificial intelligence tools|academic integrity|academic misconduct)/i
+};
+
+// Deliberately excludes ambiguous single words like "assignments" — a
+// grading-table row ("Assignments (marked on attempt): 5%") starts with
+// that word too, which would truncate the grading-breakdown capture after
+// one line. Only headings unlikely to appear as the start of an unrelated
+// sentence or table row are listed here.
+const OTHER_KNOWN_HEADINGS =
+  /(?:welcome|quick facts|class meetings|key dates|how this course works|course description|learning outcomes|^topics$|schedule of assignments|key deadlines|supplemental learning|weekly announcements|if something|telling me|engineering accreditation|academic concessions|intellectual property|final examination|grading practices|disability resource|equity and inclusion|student learning hub|health\s*&?\s*wellness|global engagement|resource links|safewalk)/im;
+
+/**
+ * Pulls a free-text block out of the syllabus starting at the first heading
+ * matching `startPattern`, running until the next heading from any policy
+ * category or `OTHER_KNOWN_HEADINGS`, whichever comes first. Returns null
+ * (never an empty/fabricated string) when the syllabus has no such section.
+ */
+function extractSection(text: string, startPattern: RegExp, excludeSelf: RegExp): string | null {
+  const startMatch = text.match(startPattern);
+  if (!startMatch || startMatch.index === undefined) return null;
+
+  const startIdx = startMatch.index;
+  const rest = text.slice(startIdx + startMatch[0].length);
+
+  const stopPatterns = [
+    ...Object.values(POLICY_SECTION_STARTS).filter((re) => re !== excludeSelf),
+    OTHER_KNOWN_HEADINGS
+  ];
+
+  let stopIdx = rest.length;
+  for (const stopPattern of stopPatterns) {
+    const flags = stopPattern.flags.includes('i') ? stopPattern.flags : stopPattern.flags + 'i';
+    const m = rest.match(new RegExp(stopPattern.source, flags));
+    if (m && m.index !== undefined && m.index < stopIdx) {
+      stopIdx = m.index;
+    }
+  }
+
+  const body = (startMatch[0] + rest.slice(0, stopIdx)).trim();
+  return body.length > 3 ? body : null;
+}
+
+function extractCoursePolicies(text: string): CoursePolicies {
+  return {
+    gradingBreakdown: extractSection(text, POLICY_SECTION_STARTS.gradingBreakdown, POLICY_SECTION_STARTS.gradingBreakdown),
+    lateWork: extractSection(text, POLICY_SECTION_STARTS.lateWork, POLICY_SECTION_STARTS.lateWork),
+    contacts: extractSection(text, POLICY_SECTION_STARTS.contacts, POLICY_SECTION_STARTS.contacts),
+    aiPolicy: extractSection(text, POLICY_SECTION_STARTS.aiPolicy, POLICY_SECTION_STARTS.aiPolicy)
+  };
+}
+
 function parseWithLocalNLP(text: string): ExtractionResult {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
 
@@ -254,7 +313,7 @@ function parseWithLocalNLP(text: string): ExtractionResult {
 
   // 3. Extract Grading Breakdown Weights Dictionary
   const weightsDict: { [key: string]: number } = {};
-  const breakdownMatch = text.match(/(?:GRADING BREAKDOWN|EVALUATION|GRADING SCHEME|COURSE GRADES)[\s\S]*?(?=SCHEDULE|KEY DEADLINES|LATE POLICY|OFFICE HOURS|$)/i);
+  const breakdownMatch = text.match(/(?:GRADING BREAKDOWN|ASSESSMENT AND GRADING|EVALUATION|GRADING SCHEME|COURSE GRADES)[\s\S]*?(?=SCHEDULE|KEY DEADLINES|LATE POLICY|OFFICE HOURS|$)/i);
   if (breakdownMatch) {
     const bLines = breakdownMatch[0].split('\n');
     for (const bLine of bLines) {
@@ -445,7 +504,8 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     courseCode,
     instructor,
     semester,
-    assignments
+    assignments,
+    policies: extractCoursePolicies(text)
   };
 }
 
@@ -475,9 +535,15 @@ async function parseWithExternalLLM(text: string, apiKey: string): Promise<Extra
       "type": "homework | exam | project | reading | quiz | other",
       "weightPercent": number_or_null
     }
-  ]
+  ],
+  "policies": {
+    "gradingBreakdown": "string_or_null",
+    "lateWork": "string_or_null",
+    "contacts": "string_or_null",
+    "aiPolicy": "string_or_null"
+  }
 }
-If a date is ambiguous, default to the current year 2026. Respond ONLY with valid JSON.`,
+For "policies", copy the relevant syllabus text verbatim (grading weight table, late/attendance/makeup rules, instructor/office-hours/marker contacts, and generative-AI/academic-integrity policy respectively). Use null for any category the syllabus doesn't mention — never invent one. If a date is ambiguous, default to the current year 2026. Respond ONLY with valid JSON.`,
       messages: [{ role: 'user', content: text }]
     })
   });

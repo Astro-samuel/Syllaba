@@ -46,6 +46,7 @@ interface DashboardTimelineProps {
   onNavigateToUpload: () => void;
   onNavigateToCalendar: () => void;
   onDeleteCourse?: (courseId: string) => void;
+  onOpenCourse?: (courseId: string) => void;
   searchQuery: string;
 }
 
@@ -57,6 +58,7 @@ export const DashboardTimeline: React.FC<DashboardTimelineProps> = ({
   onNavigateToUpload,
   onNavigateToCalendar,
   onDeleteCourse,
+  onOpenCourse,
   searchQuery
 }) => {
   const [showAllAssignments, setShowAllAssignments] = useState(false);
@@ -166,13 +168,19 @@ export const DashboardTimeline: React.FC<DashboardTimelineProps> = ({
               return (
                 <div
                   key={course.id}
+                  role={onOpenCourse ? 'button' : undefined}
+                  tabIndex={onOpenCourse ? 0 : undefined}
+                  onClick={() => onOpenCourse?.(course.id)}
                   style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
-                  className="border-2 rounded-3xl p-5 flex flex-col justify-between h-52 shadow-md relative group hover:-translate-y-1 transition-all duration-200"
+                  className="border-2 rounded-3xl p-5 flex flex-col justify-between h-52 shadow-md relative group hover:-translate-y-1 transition-all duration-200 cursor-pointer"
                 >
                   <div className="flex items-center justify-between text-xs font-mono font-extrabold">
                     <span className="number-display" style={{ color: theme.text }}>{theme.badge}</span>
                     <button
-                      onClick={() => setCourseToDelete({ id: course.id, name: course.name })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCourseToDelete({ id: course.id, name: course.name });
+                      }}
                       title={`Remove ${course.name}`}
                       aria-label={`Remove course ${course.name}`}
                       className="p-1 rounded-full bg-black/10 hover:bg-rose-600 hover:text-white transition-all text-caplen-navy"
