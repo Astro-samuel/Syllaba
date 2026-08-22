@@ -6,10 +6,16 @@ const EMPTY_POLICIES: CoursePolicies = {
   gradingBreakdown: null,
   lateWork: null,
   contacts: null,
-  aiPolicy: null
+  aiPolicy: null,
+  keyDates: null,
+  classMeetings: null,
+  topics: null
 };
 
 const POLICY_FIELDS: { key: keyof CoursePolicies; label: string; placeholder: string }[] = [
+  { key: 'keyDates', label: 'Key Dates', placeholder: 'No key dates found — first/last class, exam dates, etc.' },
+  { key: 'classMeetings', label: 'Class Meetings', placeholder: 'No class meeting times/location found.' },
+  { key: 'topics', label: 'Topics / Schedule', placeholder: 'No topics or weekly schedule found.' },
   { key: 'gradingBreakdown', label: 'Grading Breakdown', placeholder: 'No grading breakdown found — paste or type it here.' },
   { key: 'lateWork', label: 'Late Work / Attendance', placeholder: 'No late-work or attendance policy found.' },
   { key: 'contacts', label: 'Contacts & Logistics', placeholder: 'No office hours, contacts, or logistics found.' },
@@ -254,7 +260,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             onClick={() => setPoliciesExpanded((v) => !v)}
             className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-50 transition-colors"
           >
-            <span className="font-heading text-sm font-extrabold text-caplen-navy">Course Policies</span>
+            <span className="font-heading text-sm font-extrabold text-caplen-navy">Course Info & Policies</span>
             {policiesExpanded ? (
               <ChevronUp className="h-4 w-4 text-slate-400" />
             ) : (

@@ -35,6 +35,9 @@ export interface CoursePolicies {
   lateWork: string | null;
   contacts: string | null;
   aiPolicy: string | null;
+  keyDates: string | null;
+  classMeetings: string | null;
+  topics: string | null;
 }
 
 export interface ExtractedAssignment {

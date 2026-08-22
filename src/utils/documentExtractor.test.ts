@@ -21,6 +21,10 @@ Instructor Mehran Shirazi, Ph.D., P.Eng.
 Email mehran.shirazi@ubc.ca
 Office EME 3219 · 250 807 8140
 
+Class meetings
+Section   Days and time   Room
+101   Tuesday and Thursday, 2:00 – 3:30 PM   ASC-140
+
 Key dates
 First class Tuesday, September 8, 2026
 Midterm exam – Section 101 Thursday, November 5, 2:00 – 3:30 PM, ASC-140
@@ -31,6 +35,11 @@ Component   Weight   When
 Assignments (marked on attempt)   5%   Throughout the term
 Midterm exam (1 hour)   35%   Thursday, November 5, in class
 Final exam (3 hours)   60%   December examination period
+
+Topics
+Chapter   Sections
+1. Linear Equations
+Systems of linear equations · Row reduction and echelon forms
 
 Late work and oops tokens
 Late submissions are not accepted; Canvas flags anything late, even by one minute.
@@ -60,13 +69,16 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(result.assignments.length).toBeGreaterThan(0);
   });
 
-  it('extracts all four policy categories from their respective sections', async () => {
+  it('extracts all seven info/policy categories from their respective sections', async () => {
     const result = await parseSyllabusText(apsc179Text);
 
     expect(result.policies?.gradingBreakdown).toContain('35%');
     expect(result.policies?.lateWork?.toLowerCase()).toContain('oops token');
     expect(result.policies?.contacts?.toLowerCase()).toContain('drop-in');
     expect(result.policies?.aiPolicy?.toLowerCase()).toContain('generative ai');
+    expect(result.policies?.keyDates?.toLowerCase()).toContain('first class');
+    expect(result.policies?.classMeetings?.toLowerCase()).toContain('tuesday and thursday');
+    expect(result.policies?.topics?.toLowerCase()).toContain('linear equations');
   });
 
   it('leaves a policy category null rather than fabricating text when the syllabus has no such section', async () => {

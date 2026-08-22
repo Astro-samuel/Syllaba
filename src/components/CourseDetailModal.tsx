@@ -3,6 +3,9 @@ import { Course, Assignment, CoursePolicies } from '../types';
 import { X, CheckCircle2, Circle, Save } from 'lucide-react';
 
 const POLICY_FIELDS: { key: keyof CoursePolicies; label: string; placeholder: string }[] = [
+  { key: 'keyDates', label: 'Key Dates', placeholder: 'No key dates recorded for this course.' },
+  { key: 'classMeetings', label: 'Class Meetings', placeholder: 'No class meeting times/location recorded.' },
+  { key: 'topics', label: 'Topics / Schedule', placeholder: 'No topics or weekly schedule recorded.' },
   { key: 'gradingBreakdown', label: 'Grading Breakdown', placeholder: 'No grading breakdown recorded for this course.' },
   { key: 'lateWork', label: 'Late Work / Attendance', placeholder: 'No late-work or attendance policy recorded.' },
   { key: 'contacts', label: 'Contacts & Logistics', placeholder: 'No office hours, contacts, or logistics recorded.' },
@@ -30,6 +33,9 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
     lateWork: null,
     contacts: null,
     aiPolicy: null,
+    keyDates: null,
+    classMeetings: null,
+    topics: null,
     ...course.policies
   });
   const [dirty, setDirty] = useState(false);
@@ -87,7 +93,7 @@ export const CourseDetailModal: React.FC<CourseDetailModalProps> = ({
               tab === 'policies' ? 'bg-caplen-navy text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
             }`}
           >
-            Policies
+            Info & Policies
           </button>
         </div>
 

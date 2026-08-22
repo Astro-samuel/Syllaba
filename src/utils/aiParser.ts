@@ -204,7 +204,7 @@ export async function parseSyllabusText(
   return parseWithLocalNLP(rawText);
 }
 
-// Headings that mark the start of one of the four policy categories we pull
+// Headings that mark the start of one of the policy/info categories we pull
 // out of a syllabus, plus other common syllabus headings that only matter as
 // stop boundaries (so e.g. a grading-breakdown block doesn't run on and
 // swallow the late-policy section right after it).
@@ -212,7 +212,12 @@ const POLICY_SECTION_STARTS: Record<keyof CoursePolicies, RegExp> = {
   gradingBreakdown: /(?:grading breakdown|assessment and grading|evaluation\s*&?\s*grading|grading scheme|course grades)/i,
   lateWork: /(?:late (?:policy|work|submissions?)|oops tokens?|attendance(?: policy)?|makeup policy)/i,
   contacts: /(?:office hours|drop-in(?:\s*\(office\))? hours|markers?\b|getting help|contact(?:s|\sinformation)?)/i,
-  aiPolicy: /(?:generative ai|artificial intelligence tools|academic integrity|academic misconduct)/i
+  aiPolicy: /(?:generative ai|artificial intelligence tools|academic integrity|academic misconduct)/i,
+  keyDates: /(?:key dates|important dates)/i,
+  classMeetings: /(?:class meetings|meeting times)/i,
+  // Anchored to a whole line so a sentence that merely mentions "topics" in
+  // passing doesn't get mistaken for the "Topics" heading itself.
+  topics: /^topics\s*$|schedule of topics|weekly schedule|week-by-week topics/im
 };
 
 // Deliberately excludes ambiguous single words like "assignments" — a
@@ -221,7 +226,7 @@ const POLICY_SECTION_STARTS: Record<keyof CoursePolicies, RegExp> = {
 // one line. Only headings unlikely to appear as the start of an unrelated
 // sentence or table row are listed here.
 const OTHER_KNOWN_HEADINGS =
-  /(?:welcome|quick facts|class meetings|key dates|how this course works|course description|learning outcomes|^topics$|schedule of assignments|key deadlines|supplemental learning|weekly announcements|if something|telling me|engineering accreditation|academic concessions|intellectual property|final examination|grading practices|disability resource|equity and inclusion|student learning hub|health\s*&?\s*wellness|global engagement|resource links|safewalk)/im;
+  /(?:welcome|quick facts|how this course works|course description|learning outcomes|class time|what a normal week|schedule of assignments|key deadlines|supplemental learning|weekly announcements|if something|telling me|engineering accreditation|academic concessions|intellectual property|final examination|grading practices|disability resource|equity and inclusion|student learning hub|health\s*&?\s*wellness|global engagement|resource links|safewalk)/im;
 
 /**
  * Pulls a free-text block out of the syllabus starting at the first heading
@@ -255,12 +260,11 @@ function extractSection(text: string, startPattern: RegExp, excludeSelf: RegExp)
 }
 
 function extractCoursePolicies(text: string): CoursePolicies {
-  return {
-    gradingBreakdown: extractSection(text, POLICY_SECTION_STARTS.gradingBreakdown, POLICY_SECTION_STARTS.gradingBreakdown),
-    lateWork: extractSection(text, POLICY_SECTION_STARTS.lateWork, POLICY_SECTION_STARTS.lateWork),
-    contacts: extractSection(text, POLICY_SECTION_STARTS.contacts, POLICY_SECTION_STARTS.contacts),
-    aiPolicy: extractSection(text, POLICY_SECTION_STARTS.aiPolicy, POLICY_SECTION_STARTS.aiPolicy)
-  };
+  const result = {} as CoursePolicies;
+  for (const key of Object.keys(POLICY_SECTION_STARTS) as (keyof CoursePolicies)[]) {
+    result[key] = extractSection(text, POLICY_SECTION_STARTS[key], POLICY_SECTION_STARTS[key]);
+  }
+  return result;
 }
 
 function parseWithLocalNLP(text: string): ExtractionResult {
@@ -565,10 +569,13 @@ async function parseWithExternalLLM(text: string, apiKey: string): Promise<Extra
     "gradingBreakdown": "string_or_null",
     "lateWork": "string_or_null",
     "contacts": "string_or_null",
-    "aiPolicy": "string_or_null"
+    "aiPolicy": "string_or_null",
+    "keyDates": "string_or_null",
+    "classMeetings": "string_or_null",
+    "topics": "string_or_null"
   }
 }
-For "policies", copy the relevant syllabus text verbatim (grading weight table, late/attendance/makeup rules, instructor/office-hours/marker contacts, and generative-AI/academic-integrity policy respectively). Use null for any category the syllabus doesn't mention — never invent one. If a date is ambiguous, default to the current year 2026. Respond ONLY with valid JSON.`,
+For "policies", copy the relevant syllabus text verbatim: grading weight table, late/attendance/makeup rules, instructor/office-hours/marker contacts, generative-AI/academic-integrity policy, key dates (first/last class, exam dates, other named dates that aren't graded assignments), class meeting days/times/room, and the topics/weekly schedule (chapter or week-by-week breakdown), respectively. Use null for any category the syllabus doesn't mention — never invent one. If a date is ambiguous, default to the current year 2026. Respond ONLY with valid JSON.`,
       messages: [{ role: 'user', content: text }]
     })
   });
