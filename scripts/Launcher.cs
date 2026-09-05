@@ -33,10 +33,20 @@ namespace SyllabaLauncher
                     return;
                 }
 
+                // AppDomain.CurrentDomain.BaseDirectory always ends with a
+                // trailing '\' -- quoting it as-is ("...Windows\") breaks Win32
+                // command-line argument parsing, where a backslash immediately
+                // before the closing quote is unescaped into a literal quote
+                // character instead of closing the string. The whole argument
+                // then corrupts (Electron reported "Unable to find Electron app
+                // at ...Windows\"" -- note the stray embedded quote). Trim it
+                // before quoting.
+                string appPath = baseDir.TrimEnd('\\', '/');
+
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = electronExe,
-                    Arguments = "\"" + baseDir + "\"",
+                    Arguments = "\"" + appPath + "\"",
                     WorkingDirectory = baseDir,
                     UseShellExecute = false
                 };
@@ -48,6 +58,20 @@ namespace SyllabaLauncher
                 // instead of the built dist/index.html. That produced a silent
                 // blank white window with no error message at all.
                 psi.EnvironmentVariables["NODE_ENV"] = "production";
+
+                // If this launcher itself was started from a process tree that
+                // has ELECTRON_RUN_AS_NODE=1 set (any Electron-based tool --
+                // VS Code, Antigravity, Cursor -- inherited down through its
+                // integrated terminal), that variable makes Electron run as
+                // plain Node instead of booting the app runtime:
+                // `require('electron')` then resolves to the binary's file path
+                // string instead of the {app, BrowserWindow, ipcMain, ...}
+                // object, and main.cjs crashes immediately with "Cannot read
+                // properties of undefined (reading 'handle')" on its first
+                // ipcMain call. scripts/launch-electron.cjs already strips this
+                // for the dev-launch path; do the same here so a double-click
+                // launch from within such a terminal doesn't inherit it too.
+                psi.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
 
                 Process.Start(psi);
             }
