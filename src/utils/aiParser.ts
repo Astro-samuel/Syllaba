@@ -284,7 +284,7 @@ export async function parseSyllabusText(
 // table with no sub-heading of their own, so it's pulled out by scanning
 // for those specific labels instead of a heading + stop-boundary.
 const POLICY_SECTION_STARTS: Record<Exclude<keyof CoursePolicies, 'equipment'>, RegExp> = {
-  gradingBreakdown: /(?:grading breakdown|assessment and grading|evaluation\s*&?\s*grading|grading scheme|course grades)/i,
+  gradingBreakdown: /(?:grading breakdown|marks breakdown|assessment and grading|course assessments?|evaluation criteria and grading|evaluation\s*&?\s*grading|grading scheme|course grades)/i,
   lateWork: /(?:late (?:policy|work|submissions?)|oops tokens?|attendance(?: policy)?|makeup policy)/i,
   contacts: /(?:office hours|drop-in(?:\s*\(office\))? hours|markers?\b|getting help|contact(?:s|\sinformation)?)/i,
   aiPolicy: /(?:generative ai|artificial intelligence tools|academic integrity|academic misconduct)/i,
@@ -312,10 +312,19 @@ const QUICK_FACTS_OTHER_LABELS = /^(?:instructor|email|office|drop-in hours|cour
 // one line. Only headings unlikely to appear as the start of an unrelated
 // sentence or table row are listed here.
 const OTHER_KNOWN_HEADINGS =
-  /(?:welcome|quick facts|how this course works|course description|learning outcomes|class time|what a normal week|schedule of assignments|key deadlines|supplemental learning|weekly announcements|if something|telling me|engineering accreditation|academic concessions|intellectual property|final examination|grading practices|disability resource|equity and inclusion|student learning hub|health\s*&?\s*wellness|global engagement|resource links|safewalk)/im;
+  /(?:welcome|quick facts|how this course works|course description|learning outcomes|course objectives|class time|what a normal week|schedule of assignments|key deadlines|supplemental learning|weekly announcements|if something|telling me|engineering accreditation|academic concessions|intellectual property|tentative course schedule|grading practices|disability resource|equity and inclusion|student learning hub|health\s*&?\s*wellness|global engagement|resource links|safewalk)/im;
+
+// "Midterm Exam(ination)" and "Final Exam(ination)" as section headings —
+// separate from the pattern above and anchored to the *whole* line (optional
+// trailing colon aside) because both phrases also appear as the start of a
+// grading-table row ("Midterm Exam 30", "Final exam (3 hours)   60%   ...").
+// A real heading has nothing else on its line; a table row always has a
+// number/weight following it on the same line, so requiring end-of-line
+// tells them apart.
+const EXAM_SECTION_HEADING = /^(?:mid-?term|final|end-?term)\s+exam(?:ination)?\s*:?\s*$/im;
 
 function isKnownHeadingLine(line: string): boolean {
-  if (QUICK_FACTS_OTHER_LABELS.test(line) || OTHER_KNOWN_HEADINGS.test(line)) return true;
+  if (QUICK_FACTS_OTHER_LABELS.test(line) || OTHER_KNOWN_HEADINGS.test(line) || EXAM_SECTION_HEADING.test(line)) return true;
   return Object.values(POLICY_SECTION_STARTS).some((pattern) => {
     const flags = pattern.flags.includes('i') ? pattern.flags : pattern.flags + 'i';
     return new RegExp(pattern.source, flags).test(line);
@@ -378,7 +387,8 @@ function extractSection(text: string, startPattern: RegExp, excludeSelf: RegExp)
 
   const stopPatterns = [
     ...Object.values(POLICY_SECTION_STARTS).filter((re) => re !== excludeSelf),
-    OTHER_KNOWN_HEADINGS
+    OTHER_KNOWN_HEADINGS,
+    EXAM_SECTION_HEADING
   ];
 
   let stopIdx = rest.length;
@@ -435,8 +445,13 @@ function parseWithLocalNLP(text: string): ExtractionResult {
   }
 
   const titleShapeCheck = (l: string) =>
-    /^[A-Z0-9\s:–-]{5,65}$/i.test(l) &&
-    !/^instructor|^professor|^prof\.|^meeting|^lab:|^credit/i.test(l) &&
+    // Parens are allowed — UBC course titles routinely include the credit
+    // count this way ("APSC 182 (3) Matter and Energy I"); excluding them
+    // meant that exact shape of title never matched at all, falling through
+    // to whatever other short all-caps-ish line came first (an "Office:" or
+    // "Email:" row from the same info table, say).
+    /^[A-Z0-9\s:()–-]{5,65}$/i.test(l) &&
+    !/^instructor|^professor|^prof\.|^meeting|^lab:|^credit|^office\b|^email\b|^phone\b/i.test(l) &&
     // Excludes institutional banner text ("THE UNIVERSITY OF BRITISH
     // COLUMBIA") that some PDFs render as real extractable text rather than
     // a logo image — it has the same all-caps shape as a real title line
@@ -468,7 +483,15 @@ function parseWithLocalNLP(text: string): ExtractionResult {
   // colons after the label ("Instructor Jane Doe, Ph.D., P.Eng.") don't
   // silently fail the match and fall back to the literal "Instructor"
   // placeholder.
-  const instructorMatch = text.match(/(?:instructor|professor|prof\.|dr\.)[\s:]*([A-Z][^\r\n]+?)(?=\r|\n|meeting|lab:|office|email|phone|$)/i);
+  // The label/value separator deliberately excludes \n (unlike the capture
+  // group itself) — some syllabi render "Instructor" as its own heading line
+  // immediately above the real "Instructor: Jane Doe" row (a Quick Facts
+  // table cell split across two lines), and \s* would happily cross that
+  // newline and swallow the second "Instructor:" label as if it were part
+  // of the name, leaking it into the stored value. Requiring the label and
+  // its value to share a line means a bare heading with nothing after it
+  // simply fails to match here, and the search continues to the real row.
+  const instructorMatch = text.match(/(?:instructor|professor|prof\.|dr\.)[ \t:]*([A-Z][^\r\n]+?)(?=\r|\n|meeting|lab:|office|email|phone|$)/i);
   if (instructorMatch && instructorMatch[1].trim().length > 1) {
     // match[0] keeps a real title ("Dr. A. Reyes") but starts with the bare
     // "Instructor"/"Professor" label when there's no title in the name
@@ -570,6 +593,18 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     // their own schedule entry or reset the active date.
     if (nonScheduleLines.has(line)) continue;
 
+    // Crossing into any recognized heading (a new exam section, "Academic
+    // Integrity", etc.) drops whatever date was active in the *previous*
+    // section — otherwise a later, unrelated heading with no date of its
+    // own silently inherits one that has nothing to do with it (e.g. a
+    // "Final Examination" section with no stated date picking up whatever
+    // date the "Midterm Examination" section above it happened to end on).
+    // The line's own header-date check right below can still set a fresh
+    // date immediately after, if this same heading line states one.
+    if (isKnownHeadingLine(line)) {
+      currentActiveDate = null;
+    }
+
     if (/schedule of assignments|key deadlines|important dates|course schedule|assignment schedule/i.test(line)) {
       inScheduleSection = true;
       continue;
@@ -581,6 +616,10 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     // Check for Section Date Headers
     const headerIsoMatch = line.match(/\b(202[5-9]-\d{2}-\d{2})\b/);
     const headerSlashMatch = line.match(/\b(\d{1,2})\/(\d{1,2})\/(202[5-9]|\d{2})\b/);
+    // "27 Oct 2026" (day-before-month) — checked ahead of the month-first
+    // pattern below, which would otherwise misparse this order (matching
+    // "Oct 20" out of "Oct 2026" and silently dropping the real day, 27).
+    const headerDayMonthMatch = line.match(/\b(\d{1,2})\s+([a-z]{3,9})\s+(202[5-9])\b/i);
     const headerMonthMatch = line.match(/(?:week\s*\d+[-–—\s]*)?([a-z]{3,9})\s+(\d{1,2})/i);
 
     if (headerIsoMatch) {
@@ -590,6 +629,14 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       const d = parseInt(headerSlashMatch[2], 10);
       const y = headerSlashMatch[3].length === 2 ? 2000 + parseInt(headerSlashMatch[3], 10) : parseInt(headerSlashMatch[3], 10);
       currentActiveDate = format(new Date(y, m, d), 'yyyy-MM-dd');
+    } else if (headerDayMonthMatch) {
+      const monthStr = headerDayMonthMatch[2].toLowerCase().substring(0, 3);
+      const mIdx = monthNames.indexOf(monthStr);
+      if (mIdx !== -1) {
+        const dayNum = parseInt(headerDayMonthMatch[1], 10);
+        const year = parseInt(headerDayMonthMatch[3], 10);
+        currentActiveDate = format(new Date(year, mIdx, dayNum), 'yyyy-MM-dd');
+      }
     } else if (headerMonthMatch && !/^[a-z]/.test(line)) {
       // A line starting with a lowercase letter is almost always the
       // physically-wrapped continuation of the previous line's sentence
@@ -612,8 +659,16 @@ function parseWithLocalNLP(text: string): ExtractionResult {
 
     if (!inScheduleSection) continue;
 
+    // Checked against only the first ~8 words, not the whole line — a real
+    // schedule/label line puts its type up front ("Midterm exam – Section
+    // 101...", "Homework 1: ..."), while a policy sentence that only
+    // *mentions* an exam deep in a longer requirement ("In order to pass
+    // this course you must achieve a final exam grade of at least 45%.")
+    // would otherwise satisfy the same keyword check and get scanned as if
+    // it were its own dated deliverable.
+    const leadingWords = line.split(/\s+/).slice(0, 8).join(' ');
     const isAssignmentLine =
-      /due|homework|lab report|midterm|final project|final exam|quiz|reading|proposal|problem set|pset|assignment|paper|presentation|case study|first class|last class/i.test(line) &&
+      /due|homework|lab report|midterm|final project|final exam|quiz|reading|proposal|problem set|pset|assignment|paper|presentation|case study|first class|last class/i.test(leadingWords) &&
       !/^course|^grading|^schedule|^late policy|^office hours|^meeting|^lab:/i.test(line) &&
       !line.startsWith('(Covers') &&
       !/final exam period/i.test(line);
@@ -640,6 +695,10 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     let itemDate = lineHasTBD ? null : currentActiveDate;
     const inlineIso = line.match(/\b(202[5-9]-\d{2}-\d{2})\b/);
     const inlineSlash = line.match(/\b(\d{1,2})\/(\d{1,2})\/(202[5-9]|\d{2})\b/);
+    // "27 Oct 2026" — same day-before-month order as the header check above,
+    // checked first for the same reason (the month-first pattern below would
+    // otherwise misparse it).
+    const inlineDayMonth = line.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(202[5-9])\b/i);
     const inlineMonth = line.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})/i);
 
     if (inlineIso) {
@@ -649,6 +708,11 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       const d = parseInt(inlineSlash[2], 10);
       const y = inlineSlash[3].length === 2 ? 2000 + parseInt(inlineSlash[3], 10) : parseInt(inlineSlash[3], 10);
       itemDate = format(new Date(y, m, d), 'yyyy-MM-dd');
+    } else if (inlineDayMonth) {
+      const mIdx = monthNames.indexOf(inlineDayMonth[2].toLowerCase().substring(0, 3));
+      const dayNum = parseInt(inlineDayMonth[1], 10);
+      const year = parseInt(inlineDayMonth[3], 10);
+      itemDate = format(new Date(year, mIdx, dayNum), 'yyyy-MM-dd');
     } else if (inlineMonth) {
       const mIdx = monthNames.indexOf(inlineMonth[1].toLowerCase().substring(0, 3));
       const dayNum = parseInt(inlineMonth[2], 10);
@@ -773,15 +837,15 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     });
   }
 
-  if (assignments.length === 0) {
-    assignments.push(
-      { title: 'Assignment 1: Fundamentals', dueDate: formatDate(4), dueTime: '23:59', type: 'homework', weightPercent: 10 },
-      { title: 'Quiz 1', dueDate: formatDate(11), dueTime: '14:00', type: 'quiz', weightPercent: 10 },
-      { title: 'Midterm Examination', dueDate: formatDate(22), dueTime: '10:00', type: 'exam', weightPercent: 30 },
-      { title: 'Final Project Submission', dueDate: formatDate(38), dueTime: '23:59', type: 'project', weightPercent: 20 },
-      { title: 'Final Exam', dueDate: formatDate(48), dueTime: '09:00', type: 'exam', weightPercent: 30 }
-    );
-  }
+  // Deliberately no synthetic fallback here. This used to fill the table
+  // with five entirely made-up items (fake titles, fake dates days from
+  // today, fake weights) whenever real extraction found nothing — which
+  // reads as a real, accurate schedule with no indication it's fabricated.
+  // For a real uploaded syllabus that just doesn't match this parser's
+  // expected shape, that's actively misleading (a student could miss a real
+  // deadline trusting a fake one instead) rather than merely unhelpful. An
+  // empty table the student fills in via "Add Missing Item" is honest about
+  // what was actually found; a full fake schedule is not.
 
   return {
     courseName,

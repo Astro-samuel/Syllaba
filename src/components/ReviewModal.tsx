@@ -201,6 +201,13 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-caplen-navy">
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-6 px-3.5 text-center text-caplen-muted font-medium">
+                    No dated items found in this syllabus. Add them below, or edit the course details above and save anyway.
+                  </td>
+                </tr>
+              )}
               {items.map((item, index) => {
                 const hasDate = Boolean(item.dueDate);
 

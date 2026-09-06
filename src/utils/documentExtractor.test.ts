@@ -280,3 +280,81 @@ Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
     expect(result.policies?.contacts?.toLowerCase()).not.toContain('pearson, 2023');
   });
 });
+
+// A third syllabus (APSC 182), structured differently again: no "Key Dates"
+// or "Class Meetings" section at all — the instructor/office info sits in
+// one info block, the grading table is headed "Evaluation Criteria and
+// Grading" (not any previously-recognized heading), and the only stated
+// exam date is a sentence buried in "Midterm Examination" prose next to
+// another sentence that merely *mentions* "final exam" while stating a pass
+// requirement, with no date of its own. Locks in real bugs found by running
+// this exact text through the parser: a title with parens, cross-section
+// date leakage, grading-table rows leaking into the schedule, and a
+// deep-in-a-sentence keyword mention faking a schedule item.
+describe('parseSyllabusText against a syllabus with no Key Dates/Class Meetings section', () => {
+  const apsc182Text = `APSC 182 (3) Matter and Energy I
+
+Instructor: Dr. Elizabeth Trudel
+Email: elizabeth.trudel@ubc.ca
+Office: EME3277
+Office hours: Mondays 2:00-3:30 PM
+
+Evaluation Criteria and Grading
+Component   Weight
+In class activities   5
+Assignments   12
+Midterm Exam   30
+Final Exam   53
+
+In order to pass this course you must:
+achieve final exam grade of at least 45%.
+
+Midterm Examination
+The midterm will take place in class on Wednesday November 4th, 2026. The exam is closed book.
+
+Final Examination
+The final exam will be cumulative, closed book and a formula sheet will be provided.`;
+
+  it('picks the real title even though it contains parens ("(3)") the shape check used to reject', async () => {
+    const result = await parseSyllabusText(apsc182Text);
+    expect(result.courseCode).toBe('APSC 182');
+    expect(result.courseName).toBe('APSC 182 (3) Matter and Energy I');
+  });
+
+  it('does not let a grading-table row ("Midterm Exam   30") leak into the schedule as a fake dated item', async () => {
+    const result = await parseSyllabusText(apsc182Text);
+    const titles = result.assignments.map((a) => a.title);
+    expect(titles).not.toContain('Midterm Exam 30');
+    expect(titles).not.toContain('Final Exam 53');
+    expect(result.policies?.gradingBreakdown).toContain('Midterm Exam');
+    expect(result.policies?.gradingBreakdown).toContain('Final Exam');
+  });
+
+  it('does not treat a pass-requirement sentence that merely mentions "final exam" as a schedule item', async () => {
+    const result = await parseSyllabusText(apsc182Text);
+    const bogus = result.assignments.find((a) => a.title.toLowerCase().includes('achieve final exam grade'));
+    expect(bogus).toBeUndefined();
+  });
+
+  it('attaches the real midterm date, and does not let the final exam (genuinely undated) inherit it', async () => {
+    const result = await parseSyllabusText(apsc182Text);
+    const midterm = result.assignments.find((a) => a.title.toLowerCase().includes('midterm will take place'));
+    const finalExam = result.assignments.find((a) => a.title.toLowerCase().includes('final exam will be cumulative'));
+
+    expect(midterm?.dueDate).toBe('2026-11-04');
+    expect(finalExam?.dueDate).toBe('');
+  });
+});
+
+describe('parseSyllabusText no longer fabricates a fake schedule when nothing real is found', () => {
+  it('returns an empty assignments array instead of five made-up demo items', async () => {
+    // This syllabus text has no recognizable schedule/date structure at all
+    // (no Key Dates, no dated table the parser understands). It used to
+    // silently fill the table with five entirely fake items ("Assignment 1:
+    // Fundamentals" due in 4 days, etc.) with nothing marking them as
+    // placeholders — indistinguishable from a real extracted schedule, and
+    // able to make a student miss an actual deadline by trusting a fake one.
+    const result = await parseSyllabusText('APSC 999 Some Course\nInstructor Jane Doe\nNo dates or schedule mentioned anywhere in this document.');
+    expect(result.assignments).toEqual([]);
+  });
+});
