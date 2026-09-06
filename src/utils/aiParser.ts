@@ -331,6 +331,57 @@ function isKnownHeadingLine(line: string): boolean {
   });
 }
 
+// A full calendar date embedded anywhere in a string (not just at the
+// end) — "Wednesday November 4th, 2026", "November 4, 2026", "4 Nov 2026".
+// Used to catch a date sitting mid-sentence, which the trailing-only strips
+// in the title-cleanup chain below can't reach.
+const EMBEDDED_DATE_PATTERN =
+  /\b(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s*(?:202[4-9])?\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s*202[4-9]\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*,?\s*202[4-9]\b/i;
+
+// A source line that reads as prose ("The midterm will take place in class
+// on Wednesday November 4th, 2026. The exam is closed book.") rather than a
+// short structured label ("Midterm Exam — Nov 4"). Surgically cutting a
+// date out of the middle of a sentence like that leaves a broken fragment
+// ("The midterm will take place in class on . The exam is closed book."),
+// so titles built from prose are replaced wholesale with a canonical label
+// instead of patched in place.
+function isSentenceLikeLine(title: string): boolean {
+  return (
+    EMBEDDED_DATE_PATTERN.test(title) ||
+    title.trim().split(/\.\s+/).length > 1 ||
+    title.trim().split(/\s+/).length > 14
+  );
+}
+
+// Short, clean label for a schedule item whose source line was prose —
+// built from the keyword that identified it as an assignment line in the
+// first place, falling back to its detected AssignmentType.
+function canonicalScheduleLabel(leadingWords: string, type: AssignmentType): string {
+  const lower = leadingWords.toLowerCase();
+  if (/mid-?term/.test(lower)) return 'Midterm Exam';
+  if (/final exam/.test(lower)) return 'Final Exam';
+  if (/final project/.test(lower)) return 'Final Project';
+  if (/problem set|pset/.test(lower)) return 'Problem Set';
+  if (/lab report/.test(lower)) return 'Lab Report';
+  if (/case study/.test(lower)) return 'Case Study';
+  if (/presentation/.test(lower)) return 'Presentation';
+  if (/proposal/.test(lower)) return 'Proposal';
+  if (/quiz/.test(lower)) return 'Quiz';
+  if (/reading/.test(lower)) return 'Reading';
+  if (/homework/.test(lower)) return 'Homework';
+  if (/first class/.test(lower)) return 'First Class';
+  if (/last class/.test(lower)) return 'Last Class';
+
+  switch (type) {
+    case 'exam': return 'Exam';
+    case 'project': return 'Project';
+    case 'quiz': return 'Quiz';
+    case 'reading': return 'Reading';
+    case 'other': return 'Class Event';
+    default: return 'Assignment';
+  }
+}
+
 /**
  * Pulls every "Textbook"/"Free open textbook"/"Calculator"/"Required
  * materials" item out of the syllabus, including each one's wrapped
@@ -814,6 +865,14 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       // the title is redundant.
       .replace(/[\s,]*(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s*(?:202[4-9])?\s*$/i, '')
       .trim();
+
+    // A date embedded mid-sentence ("The midterm will take place in class
+    // on Wednesday November 4th, 2026. The exam is closed book.") survives
+    // the trailing-only strips above. Don't try to cut it out in place —
+    // replace the whole title with a short canonical label.
+    if (isSentenceLikeLine(title)) {
+      title = canonicalScheduleLabel(leadingWords, type);
+    }
 
     if (title.length > 75) {
       title = title.substring(0, 72) + '...';

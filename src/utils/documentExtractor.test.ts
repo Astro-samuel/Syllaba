@@ -11,7 +11,7 @@ import { parseSyllabusText, parseClassSchedule, parseClassScheduleOptions } from
 // behavior on text shaped the way the fixed extractor now produces it: real
 // newlines between visual lines, exactly like the APSC 179 Linear Algebra
 // syllabus that surfaced the bug.
-describe('parseSyllabusText against a real multi-page syllabus layout', () => {
+describe('parseSyllabusText: APSC 179 (real multi-page syllabus)', () => {
   const apsc179Text = `APSC 179 – Linear Algebra for Engineers
 Sections 101 and 102 · Winter 2026, Term 1 · 3 credits
 School of Engineering, UBC Okanagan
@@ -55,14 +55,14 @@ AI tools are not permitted during the midterm or the final exam.
 Academic integrity
 The academic enterprise is founded on honesty, civility, and integrity.`;
 
-  it('extracts course code and instructor instead of collapsing the page into one blob', async () => {
+  it('extracts course code and instructor', async () => {
     const result = await parseSyllabusText(apsc179Text);
 
     expect(result.courseCode).toBe('APSC 179');
     expect(result.instructor.toLowerCase()).toContain('mehran shirazi');
   });
 
-  it('does not throw and returns some assignment scaffolding when no dated schedule is present', async () => {
+  it('returns assignments without throwing', async () => {
     const result = await parseSyllabusText(apsc179Text);
 
     expect(Array.isArray(result.assignments)).toBe(true);
@@ -81,14 +81,14 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(result.policies?.topics?.toLowerCase()).toContain('linear equations');
   });
 
-  it('leaves a policy category null rather than fabricating text when the syllabus has no such section', async () => {
+  it('leaves policy category null when section is absent', async () => {
     const result = await parseSyllabusText('COURSE 101\nInstructor Jane Doe\nNo other sections here.');
 
     expect(result.policies?.lateWork).toBeNull();
     expect(result.policies?.aiPolicy).toBeNull();
   });
 
-  it('does not truncate a title mid-time when the time range is comma-joined, not dash-joined', async () => {
+  it('keeps title intact with a comma-joined time range', async () => {
     // "Thursday, November 5, 2:00 – 3:30 PM, ASC-140" — the only dash in the
     // line sits *inside* the time range, not before it. A title-stripper
     // that requires a dash immediately before the first time value matches
@@ -102,7 +102,7 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(midterm?.title).toBe('Midterm exam');
   });
 
-  it('deduplicates the same exam listed once per section so its weight is not double-counted', async () => {
+  it('deduplicates an exam listed once per section', async () => {
     // The real syllabus lists "Midterm exam – Section 101" and
     // "– Section 102" as two separate lines (each section's own room/time),
     // but a given student is enrolled in exactly one section. Counting both
@@ -117,7 +117,7 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(midterms).toHaveLength(1);
   });
 
-  it('leaves the date blank when the syllabus states it is not yet scheduled, instead of inheriting an unrelated date', async () => {
+  it('leaves the date blank when not yet scheduled', async () => {
     // "Final exam: Scheduled by the University and announced during the
     // term" is not the last-day-of-classes date, even though that's what
     // the currently-active section date would otherwise supply. Inserted
@@ -133,7 +133,7 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(finalExam?.title).toBe('Final exam');
   });
 
-  it('picks up key, non-graded schedule dates (first/last class) as their own schedule items', async () => {
+  it('captures first/last class as their own schedule items', async () => {
     const result = await parseSyllabusText(apsc179Text);
     const firstClass = result.assignments.find((a) => a.title.toLowerCase() === 'first class');
     const lastClass = result.assignments.find((a) => a.title.toLowerCase() === 'last class');
@@ -143,7 +143,7 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
     expect(lastClass?.dueDate).toBe('2026-12-08');
   });
 
-  it('attaches the grading-table weight to an item even when the table has no colon separator', async () => {
+  it('attaches weight from a colon-less table row', async () => {
     // "Midterm exam (1 hour)   35%   Thursday, November 5, in class" is a
     // rendered table row (whitespace-separated columns), not "Label: NN%".
     const result = await parseSyllabusText(apsc179Text);
@@ -181,7 +181,7 @@ The academic enterprise is founded on honesty, civility, and integrity.`;
 // ("THE UNIVERSITY OF BRITISH COLUMBIA") as real extractable text sitting
 // above the actual title line -- APSC 179's banner was a logo image, not
 // text, so this case hadn't been exercised yet.
-describe('parseSyllabusText against a second, differently-worded syllabus', () => {
+describe('parseSyllabusText: APSC 999 (differently-worded syllabus)', () => {
   const apsc999Text = `THE UNIVERSITY OF BRITISH COLUMBIA
 APSC 999 – Introduction to Widget Engineering
 Sections 101 and 102 · Winter 2026, Term 1 · 3 credits
@@ -223,14 +223,14 @@ Late submissions are not accepted; Canvas flags anything late, even by one minut
 Getting help
 Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
 
-  it('picks the real title, not the institutional banner line above it', async () => {
+  it('picks the real title over the banner line', async () => {
     const result = await parseSyllabusText(apsc999Text);
 
     expect(result.courseCode).toBe('APSC 999');
     expect(result.courseName).toBe('APSC 999 – Introduction to Widget Engineering');
   });
 
-  it('produces the same clean schedule shape on a differently-worded syllabus', async () => {
+  it('produces the same clean schedule shape', async () => {
     const result = await parseSyllabusText(apsc999Text);
     const titles = result.assignments.map((a) => a.title);
 
@@ -245,12 +245,12 @@ Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
     expect(finalExam?.dueDate).toBe('');
   });
 
-  it('leaves aiPolicy null when the syllabus genuinely has no AI/academic-integrity section', async () => {
+  it('leaves aiPolicy null when section is absent', async () => {
     const result = await parseSyllabusText(apsc999Text);
     expect(result.policies?.aiPolicy).toBeNull();
   });
 
-  it('offers one class-schedule option per section, for the recurrence picker dropdown', async () => {
+  it('offers one class-schedule option per section', async () => {
     const result = await parseSyllabusText(apsc999Text);
     const options = parseClassScheduleOptions(result.policies?.classMeetings);
 
@@ -259,7 +259,7 @@ Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
     expect(options[1]).toMatchObject({ section: '102', days: [1, 3], startTime: '15:00', endTime: '16:30', location: 'EME-1101' });
   });
 
-  it('extracts required textbook/calculator into equipment, and strips them out of contacts', async () => {
+  it('extracts textbook/calculator into equipment, not contacts', async () => {
     const result = await parseSyllabusText(apsc999Text);
 
     expect(result.policies?.equipment?.toLowerCase()).toContain('foundations of widget design');
@@ -269,7 +269,7 @@ Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
     expect(result.policies?.contacts?.toLowerCase()).toContain('drop-in hours');
   });
 
-  it('captures a wrapped textbook citation continuation line, not just the labeled first line', async () => {
+  it('captures a wrapped textbook citation continuation line', async () => {
     // "Textbook ..., 4th edition,\nPearson, 2023" — the citation wraps onto
     // a second physical line with no label of its own. Matching only lines
     // that start with "Textbook" would truncate the citation and leave
@@ -291,7 +291,7 @@ Drop-in hours are Wednesdays, 2:00 – 4:00 PM, in EME 3311.`;
 // this exact text through the parser: a title with parens, cross-section
 // date leakage, grading-table rows leaking into the schedule, and a
 // deep-in-a-sentence keyword mention faking a schedule item.
-describe('parseSyllabusText against a syllabus with no Key Dates/Class Meetings section', () => {
+describe('parseSyllabusText: APSC 182 (no Key Dates/Class Meetings section)', () => {
   const apsc182Text = `APSC 182 (3) Matter and Energy I
 
 Instructor: Dr. Elizabeth Trudel
@@ -315,13 +315,13 @@ The midterm will take place in class on Wednesday November 4th, 2026. The exam i
 Final Examination
 The final exam will be cumulative, closed book and a formula sheet will be provided.`;
 
-  it('picks the real title even though it contains parens ("(3)") the shape check used to reject', async () => {
+  it('picks a title containing parens', async () => {
     const result = await parseSyllabusText(apsc182Text);
     expect(result.courseCode).toBe('APSC 182');
     expect(result.courseName).toBe('APSC 182 (3) Matter and Energy I');
   });
 
-  it('does not let a grading-table row ("Midterm Exam   30") leak into the schedule as a fake dated item', async () => {
+  it('keeps grading-table rows out of the schedule', async () => {
     const result = await parseSyllabusText(apsc182Text);
     const titles = result.assignments.map((a) => a.title);
     expect(titles).not.toContain('Midterm Exam 30');
@@ -330,24 +330,29 @@ The final exam will be cumulative, closed book and a formula sheet will be provi
     expect(result.policies?.gradingBreakdown).toContain('Final Exam');
   });
 
-  it('does not treat a pass-requirement sentence that merely mentions "final exam" as a schedule item', async () => {
+  it('ignores a pass-requirement sentence mentioning "final exam"', async () => {
     const result = await parseSyllabusText(apsc182Text);
     const bogus = result.assignments.find((a) => a.title.toLowerCase().includes('achieve final exam grade'));
     expect(bogus).toBeUndefined();
   });
 
-  it('attaches the real midterm date, and does not let the final exam (genuinely undated) inherit it', async () => {
+  it('attaches the midterm date without leaking it to the final exam', async () => {
     const result = await parseSyllabusText(apsc182Text);
-    const midterm = result.assignments.find((a) => a.title.toLowerCase().includes('midterm will take place'));
-    const finalExam = result.assignments.find((a) => a.title.toLowerCase().includes('final exam will be cumulative'));
+    // The source lines are full prose sentences ("The midterm will take
+    // place in class on Wednesday November 4th, 2026. The exam is closed
+    // book.") — the title is a short canonical label, not the raw sentence,
+    // so neither title carries the embedded date text.
+    const midterm = result.assignments.find((a) => a.title === 'Midterm Exam');
+    const finalExam = result.assignments.find((a) => a.title === 'Final Exam');
 
+    expect(midterm?.title).not.toMatch(/november|\d{4}/i);
     expect(midterm?.dueDate).toBe('2026-11-04');
     expect(finalExam?.dueDate).toBe('');
   });
 });
 
-describe('parseSyllabusText no longer fabricates a fake schedule when nothing real is found', () => {
-  it('returns an empty assignments array instead of five made-up demo items', async () => {
+describe('parseSyllabusText: no schedule found', () => {
+  it('returns an empty array instead of fake demo items', async () => {
     // This syllabus text has no recognizable schedule/date structure at all
     // (no Key Dates, no dated table the parser understands). It used to
     // silently fill the table with five entirely fake items ("Assignment 1:
