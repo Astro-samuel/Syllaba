@@ -352,6 +352,22 @@ The final exam will be cumulative, closed book and a formula sheet will be provi
     expect(finalExam?.dueDate).toBe('');
   });
 
+  it('attaches each exam\'s own weight from a bare-number grading table with no "%" sign', async () => {
+    // This real table never prints a percent sign ("Midterm Exam   30", not
+    // "Midterm Exam   30%") since the column header already says "Weight" —
+    // the existing weight-row regexes all required a literal "%".
+    const result = await parseSyllabusText(apsc182Text);
+    const midterm = result.assignments.find((a) => a.title === 'Midterm Exam');
+    const finalExam = result.assignments.find((a) => a.title === 'Final Exam');
+
+    // The midterm's own explanatory sentence also mentions "the final exam"
+    // ("the weight of the midterm exam will be moved to the final exam") —
+    // without checking "midterm exam" first, that sentence matched the
+    // final-exam branch instead and gave the midterm entry the final's 53%.
+    expect(midterm?.weightPercent).toBe(30);
+    expect(finalExam?.weightPercent).toBe(53);
+  });
+
   it('does not duplicate the midterm from its own bare section heading or a wrapped policy sentence', async () => {
     // Two more ways the same "Midterm Exam" item used to get counted twice:
     // (1) the bare "Midterm Examination" heading line itself contains the

@@ -608,12 +608,20 @@ function parseWithLocalNLP(text: string): ExtractionResult {
   if (gradingBreakdownText) {
     const bLines = gradingBreakdownText.split('\n');
     for (const bLine of bLines) {
-      // "Label: NN%" (prose-style breakdown) or "Label   NN%   ..." (a
+      // "Label: NN%" (prose-style breakdown), "Label   NN%   ..." (a
       // rendered table row, column-separated by whitespace with no colon —
-      // pdf.js table extraction never inserts one).
+      // pdf.js table extraction never inserts one), or "Label NN" with a
+      // bare number and no "%" at all — some real "Weight" tables never
+      // print the percent sign since the column header already says
+      // "Weight" (e.g. "Midterm Exam 30" under a "Component  Weight"
+      // header). Only tried within gradingBreakdownText specifically, so a
+      // trailing number here is reliably this category's percentage, not a
+      // guess — this whole block only runs on lines already anchored inside
+      // the grading section.
       const itemMatch =
         bLine.match(/([A-Za-z0-9\s]+?)(?:\((\d+)\s*total\))?:\s*(\d+(?:\.\d+)?)%/i) ||
-        bLine.match(/^([A-Za-z][A-Za-z0-9\s()]*?)(?:\((\d+)\s*total\))?\s{2,}(\d+(?:\.\d+)?)%/i);
+        bLine.match(/^([A-Za-z][A-Za-z0-9\s()]*?)(?:\((\d+)\s*total\))?\s{2,}(\d+(?:\.\d+)?)%/i) ||
+        bLine.match(/^([A-Za-z][A-Za-z0-9()]*(?:\s+[A-Za-z0-9()]+)*?)\s+()(\d+(?:\.\d+)?)\s*$/);
       if (itemMatch) {
         // Strip any other parenthetical annotation ("(1 hour)", "(marked on
         // attempt)") so the key matches the plain category names looked up
@@ -823,20 +831,30 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       weightPercent = parseFloat(inlineWeightMatch[1]);
     } else {
       const lowerLine = line.toLowerCase();
+      // Checked against the leading words only (the same slice used to
+      // classify the line as an assignment in the first place), not the
+      // whole line — a prose item's own explanatory sentence commonly
+      // mentions the *other* exam further in ("...the weight of the
+      // midterm exam will be moved to the final exam"), which would
+      // otherwise satisfy "final exam" and steal that category's weight for
+      // this, unrelated, midterm entry.
+      const leadingLower = leadingWords.toLowerCase();
       if (/homework/i.test(lowerLine) && weightsDict['homework assignments']) {
         weightPercent = weightsDict['homework assignments'];
       } else if (/lab report/i.test(lowerLine) && weightsDict['lab reports']) {
         weightPercent = weightsDict['lab reports'];
-      } else if (/midterm exam 1/i.test(lowerLine) && weightsDict['midterm exam 1']) {
+      } else if (/midterm exam 1/i.test(leadingLower) && weightsDict['midterm exam 1']) {
         weightPercent = weightsDict['midterm exam 1'];
-      } else if (/midterm exam 2/i.test(lowerLine) && weightsDict['midterm exam 2']) {
+      } else if (/midterm exam 2/i.test(leadingLower) && weightsDict['midterm exam 2']) {
         weightPercent = weightsDict['midterm exam 2'];
       } else if (/final project/i.test(lowerLine) && !/proposal/i.test(lowerLine) && weightsDict['final project']) {
         // A "Final Project Proposal" is a checkpoint, not the graded deliverable —
         // the category's full weight belongs to the actual submission only, or
         // both lines would double-claim the same percentage.
         weightPercent = weightsDict['final project'];
-      } else if (/final exam/i.test(lowerLine) && weightsDict['final exam']) {
+      } else if (/midterm/i.test(leadingLower) && weightsDict['midterm exam']) {
+        weightPercent = weightsDict['midterm exam'];
+      } else if (/final exam/i.test(leadingLower) && weightsDict['final exam']) {
         weightPercent = weightsDict['final exam'];
       } else {
         // Generic fallback for grading tables that don't match one of the
