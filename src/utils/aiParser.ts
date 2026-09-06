@@ -286,7 +286,7 @@ export async function parseSyllabusText(
 const POLICY_SECTION_STARTS: Record<Exclude<keyof CoursePolicies, 'equipment'>, RegExp> = {
   gradingBreakdown: /(?:grading breakdown|marks breakdown|assessment and grading|course assessments?|evaluation criteria and grading|evaluation\s*&?\s*grading|grading scheme|course grades)/i,
   lateWork: /(?:late (?:policy|work|submissions?)|oops tokens?|attendance(?: policy)?|makeup policy)/i,
-  contacts: /(?:office hours|drop-in(?:\s*\(office\))? hours|markers?\b|getting help|contact(?:s|\sinformation)?)/i,
+  contacts: /(?:(?:theory|project|assessment|course)\s+instructor(?:\s*name)?\s*:|office hours|drop-in(?:\s*\(office\))? hours|markers?\b|getting help|contact(?:s|\sinformation)?)/i,
   aiPolicy: /(?:generative ai|artificial intelligence tools|academic integrity|academic misconduct)/i,
   keyDates: /(?:key dates|important dates)/i,
   classMeetings: /(?:class meetings|meeting times)/i,
@@ -547,7 +547,10 @@ function parseWithLocalNLP(text: string): ExtractionResult {
     // match[0] keeps a real title ("Dr. A. Reyes") but starts with the bare
     // "Instructor"/"Professor" label when there's no title in the name
     // itself ("Instructor Mehran Shirazi") — strip only that leading label.
-    instructor = instructorMatch[0].replace(/^(?:instructor|professor)[\s:]*/i, '').trim();
+    // Some syllabi label the row "Theory Instructor Name: Dr Wouter Bam" —
+    // strip the "Name" word too, or it leaks into the stored value as
+    // "Name: Dr Wouter Bam".
+    instructor = instructorMatch[0].replace(/^(?:instructor|professor)\s*(?:name)?[\s:]*/i, '').trim();
   }
 
   const semesterMatch = text.match(/\b(fall|spring|summer|winter)\s*202[5-9]\b/i);
@@ -656,6 +659,14 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       currentActiveDate = null;
     }
 
+    // A bare "Midterm Examination" / "Final Exam" heading (nothing else on
+    // the line — that's what the anchored EXAM_SECTION_HEADING regex means)
+    // is a section title, not a schedule item. Without this, the heading
+    // line itself slips past the isAssignmentLine check below (it contains
+    // "midterm"/"final exam") and gets pushed as a fake dated-empty entry
+    // duplicating the real item that follows in the section's body text.
+    if (EXAM_SECTION_HEADING.test(line)) continue;
+
     if (/schedule of assignments|key deadlines|important dates|course schedule|assignment schedule/i.test(line)) {
       inScheduleSection = true;
       continue;
@@ -722,7 +733,14 @@ function parseWithLocalNLP(text: string): ExtractionResult {
       /due|homework|lab report|midterm|final project|final exam|quiz|reading|proposal|problem set|pset|assignment|paper|presentation|case study|first class|last class/i.test(leadingWords) &&
       !/^course|^grading|^schedule|^late policy|^office hours|^meeting|^lab:/i.test(line) &&
       !line.startsWith('(Covers') &&
-      !/final exam period/i.test(line);
+      !/final exam period/i.test(line) &&
+      // A line starting with a lowercase letter is the physically-wrapped
+      // continuation of the previous line's sentence ("...the weight\nof the
+      // midterm exam will be moved to the final exam."), not a new
+      // schedule/label row — real schedule rows always start with a
+      // capitalized label ("Midterm exam", "First class"). Without this, a
+      // policy sentence's wrapped tail gets scanned as its own fake item.
+      !/^[a-z]/.test(line);
 
     if (!isAssignmentLine) continue;
 

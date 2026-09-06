@@ -310,7 +310,9 @@ In order to pass this course you must:
 achieve final exam grade of at least 45%.
 
 Midterm Examination
-The midterm will take place in class on Wednesday November 4th, 2026. The exam is closed book.
+The midterm will take place in class on Wednesday November 4th, 2026. The exam is closed book. For
+approved academic concession, the weight
+of the midterm exam will be moved to the final exam. There will be no make up midterm examination.
 
 Final Examination
 The final exam will be cumulative, closed book and a formula sheet will be provided.`;
@@ -348,6 +350,61 @@ The final exam will be cumulative, closed book and a formula sheet will be provi
     expect(midterm?.title).not.toMatch(/november|\d{4}/i);
     expect(midterm?.dueDate).toBe('2026-11-04');
     expect(finalExam?.dueDate).toBe('');
+  });
+
+  it('does not duplicate the midterm from its own bare section heading or a wrapped policy sentence', async () => {
+    // Two more ways the same "Midterm Exam" item used to get counted twice:
+    // (1) the bare "Midterm Examination" heading line itself contains the
+    // word "midterm" and was scanned as its own dateless entry; (2) the
+    // concession sentence wraps onto a second physical line ("...the
+    // weight\nof the midterm exam will be moved...") whose lowercase-started
+    // continuation still contains "midterm exam" and was scanned as a fresh,
+    // dateless item too.
+    const result = await parseSyllabusText(apsc182Text);
+    const midterms = result.assignments.filter((a) => a.title === 'Midterm Exam');
+    expect(midterms).toHaveLength(1);
+  });
+});
+
+describe('parseSyllabusText: instructor and office-hours extraction on a multi-instructor syllabus', () => {
+  // APSC 169's syllabus names three separate instructors (theory, project,
+  // assessment), each with their own office and drop-in hours, under a
+  // "Theory Instructor Name:"/"Project Instructor Name:" label rather than a
+  // bare "Instructor:" row.
+  const apsc169Text = `APSC 169 (3) Sustainable Engineering Design
+Winter Term 1 (September - December 2026)
+
+Theory Instructor Name: Dr Wouter Bam (he/him/his)
+[contact for personal aspects related to course theory delivery]
+Office: EME 3271
+Student drop-in hours: Tuesdays & Fridays: 1:00 pm – 2:00 pm
+
+Project Instructor Name: Dr Alon Eisenstein (he/him/his)
+[contact via Canvas's Inbox for personal aspects related to course project]
+Office: EME 3283
+Student drop-in hours: Wednesdays & Fridays 4:00 pm – 5:00 pm
+
+Evaluation Criteria and Grading
+Component Weight
+Midterm Exam 15
+Final Exam 45`;
+
+  it('strips the "Name" label instead of leaking it into the instructor field', async () => {
+    // The bare instructor-label strip only removed "Instructor"/"Professor"
+    // — "Theory Instructor Name: Dr Wouter Bam" left "Name:" glued onto the
+    // front of the stored value ("Name: Dr Wouter Bam...").
+    const result = await parseSyllabusText(apsc169Text);
+    expect(result.instructor).toBe('Dr Wouter Bam (he/him/his)');
+    expect(result.instructor.toLowerCase()).not.toContain('name:');
+  });
+
+  it('captures each named instructor\'s own office and drop-in hours', async () => {
+    const result = await parseSyllabusText(apsc169Text);
+    const contacts = result.policies?.contacts?.toLowerCase() ?? '';
+    expect(contacts).toContain('wouter bam');
+    expect(contacts).toContain('1:00 pm');
+    expect(contacts).toContain('alon eisenstein');
+    expect(contacts).toContain('4:00 pm');
   });
 });
 
